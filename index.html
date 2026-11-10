@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0D0A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="app.webmanifest">
+<link rel="apple-touch-icon" href="logo.png">
+<title>ASF Training</title>
+<!-- App del cliente (beta, 9 nov 2026). Solo corre en la PC de Angel: lee /api/app, que manda lo de un solo cliente. -->
+<style>
+@font-face { font-family: Poppins; font-weight: 400; src: url(fuentes/p400.woff2) format('woff2'); }
+@font-face { font-family: Poppins; font-weight: 600; src: url(fuentes/p600.woff2) format('woff2'); }
+@font-face { font-family: Poppins; font-weight: 700; src: url(fuentes/p700.woff2) format('woff2'); }
+@font-face { font-family: Poppins; font-weight: 800; src: url(fuentes/p800.woff2) format('woff2'); }
+:root {
+  --fondo: #0B0D0A; --marco: #050605; --tarjeta: #151913; --tarjeta2: #1D2219; --linea: #2A3125;
+  --texto: #F2F5EE; --suave: #A3AC9B; --tenue: #6E7768;
+  --lima: #A8FF3E; --lima-osc: #1E2E0B; --ambar: #FFC94D; --rojo: #FF6B5B;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--marco); color: var(--texto); font-family: Poppins, system-ui, sans-serif; }
+body { min-height: 100vh; display: flex; justify-content: center; }
+.app { width: 100%; max-width: 430px; min-height: 100vh; background: var(--fondo); position: relative; padding-bottom: 92px; }
+@media (min-width: 600px) {
+  body { align-items: center; padding: 24px 0; }
+  .app { min-height: 0; height: min(900px, calc(100vh - 48px)); border-radius: 40px; border: 10px solid #1a1d18; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .scroll { flex: 1; overflow-y: auto; padding-bottom: 92px; }
+  nav { position: absolute !important; }
+}
+.scroll::-webkit-scrollbar { width: 0; }
+header { padding: 22px 20px 6px; display: flex; align-items: center; gap: 12px; }
+header img { width: 42px; height: 42px; object-fit: contain; }
+header .hola { font-size: 13px; color: var(--suave); }
+header h1 { margin: 0; font-size: 21px; font-weight: 700; line-height: 1.15; }
+.beta { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--lima); border: 1px solid var(--lima); border-radius: 99px; padding: 3px 8px; }
+main { padding: 8px 16px 20px; }
+section[data-v] { display: none; }
+section[data-v].on { display: block; animation: entra .25s ease; }
+@keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+h2 { font-size: 13px; font-weight: 600; color: var(--suave); text-transform: uppercase; letter-spacing: .08em; margin: 22px 4px 10px; }
+.card { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 20px; padding: 18px; margin-bottom: 12px; }
+.hero { background: linear-gradient(160deg, #1f2b12 0%, var(--tarjeta) 60%); border-color: #34481c; }
+.etq { font-size: 12px; color: var(--lima); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.grande { font-size: 30px; font-weight: 800; line-height: 1.1; margin: 6px 0 4px; }
+.sub { color: var(--suave); font-size: 14px; line-height: 1.5; }
+.chico { font-size: 12px; color: var(--tenue); }
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: 14px; padding: 15px; font: 600 15px Poppins, sans-serif; text-decoration: none; cursor: pointer; margin-top: 14px; }
+.btn.lima { background: var(--lima); color: #0B0D0A; }
+.btn.borde { background: transparent; color: var(--texto); border: 1px solid var(--linea); }
+.estado { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 99px; margin-top: 8px; }
+.estado.ok { background: var(--lima-osc); color: var(--lima); }
+.estado.pend { background: #2b2410; color: var(--ambar); }
+.fila { display: flex; gap: 10px; }
+.fila > * { flex: 1; }
+.mini { background: var(--tarjeta2); border-radius: 14px; padding: 12px; }
+.mini b { display: block; font-size: 22px; font-weight: 700; }
+.puntos { display: flex; gap: 6px; margin-top: 8px; }
+.punto { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--linea); display: grid; place-items: center; font-size: 13px; color: #0B0D0A; font-weight: 700; }
+.punto.lleno { background: var(--lima); border-color: var(--lima); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chip { background: var(--tarjeta2); border: 1px solid var(--linea); color: var(--texto); border-radius: 12px; padding: 10px 13px; font: 500 14px Poppins, sans-serif; cursor: pointer; }
+.chip.on { background: var(--lima); color: #0B0D0A; border-color: var(--lima); font-weight: 600; }
+.paso { font-size: 14px; font-weight: 600; margin-top: 16px; }
+.resultado { margin-top: 14px; background: var(--lima-osc); border: 1px solid #3c5a1a; border-radius: 16px; padding: 16px; display: none; }
+.resultado.on { display: block; animation: entra .2s ease; }
+.resultado h3 { margin: 0 0 6px; font-size: 18px; color: var(--lima); }
+.resultado p, .resultado li { font-size: 14px; line-height: 1.55; margin: 4px 0; }
+.resultado ul { padding-left: 18px; margin: 6px 0; }
+.barra { height: 10px; background: var(--tarjeta2); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+.barra i { display: block; height: 100%; background: var(--lima); border-radius: 99px; }
+.semanas { display: flex; align-items: flex-end; gap: 6px; height: 110px; margin-top: 14px; }
+.semanas div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.semanas span { display: block; width: 100%; background: var(--lima); border-radius: 6px 6px 3px 3px; min-height: 4px; }
+.semanas span.medio { background: var(--ambar); } .semanas span.bajo { background: var(--rojo); } .semanas span.curso { background: transparent; border: 2px dashed var(--tenue); }
+.semanas small { font-size: 10px; color: var(--tenue); }
+.lista { list-style: none; margin: 0; padding: 0; }
+.lista li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linea); font-size: 14px; }
+.lista li:last-child { border-bottom: 0; }
+.lista .ok { color: var(--lima); } .lista .no { color: var(--tenue); }
+.plato { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.plato div { background: var(--tarjeta2); border-radius: 14px; padding: 12px; font-size: 13px; line-height: 1.4; }
+.plato b { display: block; font-size: 14px; margin-bottom: 2px; }
+.plato .ico { font-size: 22px; display: block; margin-bottom: 4px; }
+.copiar { display: flex; align-items: center; gap: 10px; background: var(--tarjeta2); border: 1px dashed var(--linea); border-radius: 14px; padding: 12px; margin-top: 10px; font-size: 14px; cursor: pointer; width: 100%; color: var(--texto); font-family: Poppins, sans-serif; text-align: left; }
+.copiar em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--lima); white-space: nowrap; }
+.pasos { counter-reset: p; list-style: none; padding: 0; margin: 10px 0 0; }
+.pasos li { counter-increment: p; position: relative; padding: 0 0 12px 38px; font-size: 14px; line-height: 1.5; }
+.pasos li::before { content: counter(p); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--tarjeta2); color: var(--lima); font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.buscar { width: 100%; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 14px; padding: 13px 14px; color: var(--texto); font: 400 15px Poppins, sans-serif; outline: none; }
+.buscar:focus { border-color: var(--lima); }
+details { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 16px; margin-bottom: 8px; overflow: hidden; }
+summary { list-style: none; padding: 14px 16px; font-size: 15px; font-weight: 500; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: '+'; color: var(--lima); font-weight: 700; font-size: 18px; line-height: 1; }
+details[open] summary::after { content: '–'; }
+details .resp { padding: 0 16px 14px; font-size: 14px; line-height: 1.55; color: var(--suave); }
+details .resp p { margin: 0 0 6px; }
+.grupo { font-size: 12px; color: var(--tenue); margin: 16px 4px 8px; text-transform: uppercase; letter-spacing: .08em; }
+.recurso { display: flex; align-items: center; gap: 14px; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 18px; padding: 16px; margin-bottom: 10px; text-decoration: none; color: var(--texto); }
+.recurso .ic { width: 46px; height: 46px; border-radius: 14px; background: var(--lima-osc); display: grid; place-items: center; font-size: 22px; flex: none; }
+.recurso b { display: block; font-size: 15px; font-weight: 600; }
+.recurso span { font-size: 13px; color: var(--suave); }
+.recurso::after { content: '›'; margin-left: auto; color: var(--tenue); font-size: 24px; }
+nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: rgba(11,13,10,.94); backdrop-filter: blur(12px); border-top: 1px solid var(--linea); display: flex; padding: 8px 6px calc(10px + env(safe-area-inset-bottom)); z-index: 5; }
+@media (min-width: 600px) { nav { left: 0; transform: none; bottom: 0; } }
+nav button { flex: 1; background: none; border: 0; color: var(--tenue); font: 500 11px Poppins, sans-serif; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; cursor: pointer; }
+nav button svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: var(--lima); }
+.pie { text-align: center; font-size: 11px; color: var(--tenue); margin-top: 24px; line-height: 1.6; }
+.aviso { text-align: center; padding: 60px 24px; color: var(--suave); }
+svg.peso { width: 100%; height: 130px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="scroll">
+    <header>
+      <img src="logo.png" alt="ASF">
+      <div><div class="hola" id="saludo">ASF Training</div><h1 id="nombre">Tu sistema</h1></div>
+      <span class="beta">BETA</span>
+    </header>
+    <main id="main"><div class="aviso">Cargando…</div></main>
+  </div>
+  <nav id="nav">
+    <button data-t="hoy" class="on"><svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"/></svg>Hoy</button>
+    <button data-t="avance"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 16v-4M11 16V8M16 16v-6M20 16V5"/></svg>Mi avance</button>
+    <button data-t="comida"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></svg>Nutrición</button>
+    <button data-t="ayuda"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/></svg>Ayuda</button>
+    <button data-t="recursos"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4z"/></svg>Recursos</button>
+  </nav>
+</div>
+<script>
+const GPT = 'https://chatgpt.com/g/g-699919b6676881919688a6829ba3d004-asf-nutricion-ia';
+const TRAINERIZE = 'https://angelsotelofitness.trainerize.com';
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mas = (f, n) => { const d = new Date(f + 'T12:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv'); };
+const lunesDe = (f) => mas(f, -((new Date(f + 'T12:00').getDay() + 6) % 7));
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fechaCorta = (f) => { const d = new Date(f + 'T12:00'); return `${d.getDate()} ${MESES[d.getMonth()]}`; };
+
+// Equipo de cada plan, en palabras del cliente (servicio/problemas-y-soluciones.md, 1.2).
+const EQUIPO = {
+  gym: { txt: 'en el gimnasio', plan: 'Plan A · Gimnasio' },
+  mancuernas: { txt: 'con tus mancuernas', plan: 'Plan B1 · Mancuernas' },
+  bandas: { txt: 'con tus bandas', plan: 'Plan B2 · Bandas' },
+  nada: { txt: 'sin pesas, en casa o en el hotel', plan: 'Plan C · Sin equipo' },
+};
+const PLAN_A_EQUIPO = { A: 'gym', B1: 'mancuernas', B2: 'bandas', C: 'nada' };
+
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+// Nombre de la sesión como lo dice Angel: "B2. Superior 1" → "Superior 1".
+function sesionDe(t) {
+  const m = /^(\w+)\.\s*(.+)$/.exec(t || '');
+  if (!m) return { nombre: t, plan: null };
+  const plan = /^F\d/.test(m[1]) ? 'A' : m[1];
+  return { nombre: m[2], plan };
+}
+
+let D = null;
+
+// En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
+// el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
+const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const guarda = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const lee = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const b64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
+const hoyCDMX = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+
+async function descifrar(codigo, clave) {
+  const huella = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codigo)))).map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 20);
+  const r = await fetch(`d/${huella}.json?v=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('sin-archivo');
+  const p = await r.json();
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(codigo + ':' + clave.trim().toUpperCase()), 'PBKDF2', false, ['deriveKey']);
+  const llave = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(p.s), iterations: p.i, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const claro = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(p.iv) }, llave, b64(p.c));
+  return JSON.parse(new TextDecoder().decode(claro));
+}
+
+function pedirClave(codigo, error) {
+  document.getElementById('main').innerHTML = `<section><div class="card" style="margin-top:24px">
+    <div class="etq">Bienvenido</div>
+    <h2 style="margin:6px 0 8px">Tu app ASF Training</h2>
+    <div class="sub">Escribe la clave que te compartió Angel. Solo se pide la primera vez en este celular.</div>
+    <input id="clave" autocomplete="off" autocapitalize="characters" maxlength="12" placeholder="Clave" style="width:100%;margin-top:14px;padding:14px;border-radius:12px;border:1px solid var(--linea);background:var(--fondo,#0B0D0A);color:var(--texto);font:600 18px Poppins,sans-serif;letter-spacing:3px;text-transform:uppercase;box-sizing:border-box">
+    ${error ? `<div class="chico" style="color:#ff7a7a;margin-top:8px">${esc(error)}</div>` : ''}
+    <button id="entrar" class="btn lima">Entrar</button>
+  </div></section>`;
+  const ir = async () => {
+    const v = document.getElementById('clave').value;
+    if (!v.trim()) return;
+    document.getElementById('entrar').textContent = 'Abriendo…';
+    try { D = await descifrar(codigo, v); guarda('asf-clave', v.trim().toUpperCase()); listo(); }
+    catch (e) { pedirClave(codigo, e.message === 'sin-archivo' ? 'No encontré tus datos. Pídele a Angel tu link de nuevo.' : 'La clave no es correcta. Revísala e intenta otra vez.'); }
+  };
+  document.getElementById('entrar').onclick = ir;
+  document.getElementById('clave').onkeydown = (e) => { if (e.key === 'Enter') ir(); };
+}
+
+function listo() {
+  if (D.error) { document.getElementById('main').innerHTML = `<div class="aviso">${esc(D.error)}</div>`; return; }
+  if (!LOCAL) D.hoy = hoyCDMX(); // la sesión de hoy se calcula con la fecha real del celular, no con la del día en que se publicó
+  pintar();
+}
+
+async function cargar() {
+  if (LOCAL) {
+    const quien = decodeURIComponent(location.hash.slice(1));
+    if (!quien) { document.getElementById('main').innerHTML = '<div class="aviso">Abre la app con el nombre del cliente al final, por ejemplo <b>/app#Rafa</b></div>'; return; }
+    try { D = await (await fetch('/api/app?c=' + encodeURIComponent(quien))).json(); }
+    catch (e) { D = { error: 'No pude leer tus datos' }; }
+    return listo();
+  }
+  const codigo = location.hash.slice(1) || lee('asf-codigo');
+  if (!codigo) { document.getElementById('main').innerHTML = '<div class="aviso">Abre la app desde el link que te compartió Angel.</div>'; return; }
+  guarda('asf-codigo', codigo);
+  const clave = lee('asf-clave');
+  if (!clave) return pedirClave(codigo);
+  try { D = await descifrar(codigo, clave); listo(); }
+  catch (e) { guarda('asf-clave', null); pedirClave(codigo); }
+}
+
+function pintar() {
+  const c = D.cliente;
+  const h = new Date().getHours();
+  document.getElementById('saludo').textContent = h < 12 ? 'Buen día' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  document.getElementById('nombre').textContent = c.nombre;
+  document.getElementById('main').innerHTML = vistaHoy(c) + vistaAvance(c) + vistaComida(c) + vistaAyuda() + vistaRecursos() +
+    `<div class="pie">Beta · Método de Integración Híbrida<br>Datos de tu app al ${D.leido ? fechaCorta(D.leido) : '—'}${D.demo ? ' · DATOS DE PRUEBA' : ''}</div>`;
+  activar(tabActual);
+  conectar();
+}
+
+// ---------- HOY ----------
+function sesionesDeHoy(c) {
+  const hoy = D.hoy;
+  const deHoy = c.sesiones.filter((s) => s.f === hoy && (/^\w+\./.test(s.t) || s.tipo === 'Cardio'));
+  if (deHoy.length) return { lista: deHoy, agendadas: true };
+  // Si la app aún no trae lo de hoy, se toma lo que hizo el mismo día de la semana en las últimas 3 semanas.
+  for (const n of [7, 14, 21]) {
+    const f = mas(hoy, -n);
+    const l = c.sesiones.filter((s) => s.f === f && (/^\w+\./.test(s.t) || /^Running/.test(s.t)));
+    if (l.length) return { lista: l.map((s) => ({ ...s, hecha: false, estado: 'Pendiente', f: hoy })), agendadas: false };
+  }
+  return { lista: [], agendadas: false };
+}
+
+function proximaSesion(c) {
+  for (let n = 1; n <= 7; n++) {
+    const f = mas(D.hoy, n);
+    for (const k of [7, 14]) {
+      const l = c.sesiones.filter((s) => s.f === mas(f, -k) && /^\w+\./.test(s.t));
+      if (l.length) return { f, s: sesionDe(l[0].t) };
+    }
+  }
+  return null;
+}
+
+function vistaHoy(c) {
+  const { lista } = sesionesDeHoy(c);
+  const fuerza = lista.find((s) => /^\w+\./.test(s.t));
+  const cardio = lista.find((s) => s.tipo === 'Cardio');
+  const semana = c.semanas.find((q) => q.curso) || null;
+  let hero;
+  const equipoBase = fuerza ? PLAN_A_EQUIPO[sesionDe(fuerza.t).plan] || 'gym' : (PLAN_A_EQUIPO[c.principal] || 'gym');
+  if (fuerza) {
+    const s = sesionDe(fuerza.t);
+    hero = `<div class="card hero">
+      <div class="etq">Tu sesión de hoy · ${DIAS[new Date(D.hoy + 'T12:00').getDay()]}</div>
+      <div class="grande">${esc(s.nombre)}</div>
+      <div class="sub">${esc(cap(EQUIPO[equipoBase].txt))} · 45 min${cardio ? ' · Running después de la sesión' : ''}</div>
+      ${fuerza.hecha ? '<span class="estado ok">✓ Completada</span>' : '<span class="estado pend">● Pendiente</span>'}
+      <a class="btn lima" href="${TRAINERIZE}" target="_blank" rel="noopener">Abrir mi sesión en Trainerize</a>
+    </div>`;
+  } else if (cardio) {
+    hero = `<div class="card hero"><div class="etq">Tu sesión de hoy</div><div class="grande">Running</div>
+      <div class="sub">5 km a un ritmo cómodo, en el que puedas platicar. Si te cansas, camina un poco y vuelve a trotar.</div>
+      ${cardio.hecha ? '<span class="estado ok">✓ Completada</span>' : '<span class="estado pend">● Pendiente</span>'}
+      <a class="btn lima" href="${TRAINERIZE}" target="_blank" rel="noopener">Abrir Trainerize</a></div>`;
+  } else {
+    const p = proximaSesion(c);
+    hero = `<div class="card hero"><div class="etq">Hoy</div><div class="grande">Día de descanso</div>
+      <div class="sub">Si tienes tiempo, sal a caminar. Evita pasar dos días seguidos sin moverte.</div>
+      ${p ? `<div class="chico" style="margin-top:10px">Siguiente sesión: <b style="color:var(--texto)">${esc(p.s.nombre)}</b>, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}</div>` : ''}</div>`;
+  }
+  const pts = (h, m) => Array.from({ length: Math.max(m, h) }, (_, i) => `<span class="punto ${i < h ? 'lleno' : ''}">${i < h ? '✓' : ''}</span>`).join('');
+  const sem = semana ? `<div class="card"><div class="fila">
+      <div><div class="chico">Fuerza esta semana</div><div class="puntos">${pts(semana.fzHechas, semana.fzMeta || 3)}</div></div>
+      <div><div class="chico">Cardio esta semana</div><div class="puntos">${pts(semana.caHechas, semana.caMeta || 1)}</div></div>
+    </div><div class="chico" style="margin-top:10px">La semana va de lunes a domingo. Si pierdes una sesión, reponla antes del domingo.</div></div>` : '';
+  const sesionTxt = fuerza ? sesionDe(fuerza.t).nombre : 'tu sesión del día';
+  // Mañana: saber desde hoy qué toca ayuda a cumplir (lo dijo un cliente en su encuesta).
+  const p = proximaSesion(c);
+  const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)} · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
+    : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
+  return `<section data-v="hoy">${hero}${sem}${manana}
+    <h2>¿Se complicó tu día?</h2>
+    <div class="card" id="arbol" data-sesion="${esc(sesionTxt)}" data-equipo="${equipoBase}">
+      <div class="sub">El plan cambia el equipo y el tiempo, nunca la sesión. Responde dos preguntas:</div>
+      <div class="paso">1. ¿Cuánto tiempo tienes?</div>
+      <div class="chips" data-g="tiempo">
+        <button class="chip" data-v="45">45 min</button><button class="chip" data-v="20">20 min</button><button class="chip" data-v="10">10 min o menos</button><button class="chip" data-v="correr">No puedo salir a correr</button>
+      </div>
+      <div id="paso2" style="display:none"><div class="paso">2. ¿Qué equipo tienes a la mano?</div>
+      <div class="chips" data-g="equipo">
+        <button class="chip" data-v="gym">Gimnasio</button><button class="chip" data-v="mancuernas">Mancuernas</button><button class="chip" data-v="bandas">Bandas</button><button class="chip" data-v="nada">Sin equipo</button>
+      </div></div>
+      <div class="resultado" id="res"></div>
+    </div>
+    <div class="card"><div class="etq">Todo tu plan se puede hacer en casa</div>
+      <ul class="lista" style="margin-top:6px">
+        <li><span>Con bandas</span><span class="chico">Plan B2</span></li>
+        <li><span>Con mancuernas</span><span class="chico">Plan B1</span></li>
+        <li><span>Sin equipo (casa u hotel, 30 min)</span><span class="chico">Plan C</span></li>
+        <li><span>Cardio sin salir de casa</span><span class="chico">Plan D o E</span></li>
+      </ul><div class="chico">Es la misma sesión del día; solo cambia el equipo. Todos los planes están en tu app.</div></div>
+    <div class="card"><div class="etq">¿Dormiste mal o llegas cansado?</div><div class="sub" style="margin-top:6px">Haz el Express de 20 minutos en lugar de la sesión completa. También cuenta.</div></div>
+  </section>`;
+}
+
+function resolverArbol() {
+  const a = document.getElementById('arbol');
+  const t = a.querySelector('[data-g=tiempo] .on'), e = a.querySelector('[data-g=equipo] .on');
+  const res = document.getElementById('res'), p2 = document.getElementById('paso2');
+  const tiempo = t && t.dataset.v;
+  p2.style.display = tiempo === '45' || tiempo === '20' ? 'block' : 'none';
+  const ses = a.dataset.sesion;
+  let html = '';
+  if (tiempo === '10') {
+    html = `<h3>Salvavidas de 10 minutos</h3><p>En tu app: <b>Plan F · Salvavidas 10 min</b>. Haz 2 rondas de:</p>
+      <ul><li>10 sentadillas</li><li>8 lagartijas</li><li>10 zancadas alternas</li><li>30 s de plancha</li><li>30 s de rodillas arriba</li></ul>
+      <p>No cuenta como sesión, pero mantiene tu racha. Repón ${esc(ses)} el siguiente día disponible, antes del domingo.</p>`;
+  } else if (tiempo === 'correr') {
+    html = `<h3>30 minutos de cardio en casa o en el gimnasio</h3>
+      <p>Con caminadora, escaladora o cuerda: <b>Plan D · Cardio con equipo</b>.</p>
+      <p>Sin equipo: <b>Plan E · Cardio sin equipo</b>.</p>
+      <p>Regístralo en tu app: cuenta como tu running ✓</p>
+      <p class="chico">Si tampoco tienes 30 minutos, haz el Salvavidas.</p>`;
+  } else if (tiempo && e) {
+    const eq = EQUIPO[e.dataset.v];
+    if (tiempo === '45') {
+      html = `<h3>${esc(ses)} completa</h3><p>${esc(cap(eq.txt))}. En tu app: <b>${esc(eq.plan)}</b>, la misma sesión de hoy${e.dataset.v === 'nada' ? ' (30 minutos en circuito)' : ''}.</p><p>Si no puedes en tu horario habitual, hazla en otro momento del día ✓</p>`;
+    } else {
+      html = `<h3>Express de 20 minutos</h3><p>${esc(cap(eq.txt))}. En tu app: <b>${esc(eq.plan)}</b>.</p>
+        <ul><li>3 minutos de calentamiento</li><li>Solo los <b>3 primeros ejercicios</b> de ${esc(ses)}</li><li>En circuito, 3 rondas</li><li>60 s de descanso entre rondas</li></ul>
+        <p>Cuenta como sesión ✓</p>`;
+    }
+  }
+  res.innerHTML = html;
+  res.classList.toggle('on', !!html);
+}
+
+// ---------- MI AVANCE ----------
+function vistaAvance(c) {
+  const pctDia = Math.round(c.dia / c.duracion * 100);
+  const corte1 = c.fases[0], corte2 = corte1 + c.fases[1];
+  const fase = c.dia <= corte1 ? 'Fase 1 · Acondicionamiento' : c.dia <= corte2 ? 'Fase 2 · Fuerza' : 'Fase 3 · Volumen';
+  const meta = D.extra.meta ? `<div class="card hero"><div class="etq">Tu meta</div><div class="sub" style="color:var(--texto);font-size:17px;font-weight:600;margin-top:6px">${esc(D.extra.meta)}</div></div>` : '';
+
+  // Cumplimiento: últimos 30 días, solo semanas cerradas.
+  const u = c.u30;
+  const msg = u.apego == null ? 'Aún no hay semanas cerradas.' : u.apego >= 80 ? 'Vas cumpliendo tu plan. Así se construye el resultado.' : u.apego >= 60 ? 'Vas bien: te falta poco para llegar al 80%.' : 'Esta semana la prioridad es una: tus 3 sesiones de fuerza.';
+  const cerradas = c.semanas.slice(-8);
+  const barras = cerradas.map((q) => {
+    const v = q.curso ? 100 : (q.apego || 0);
+    const cls = q.curso ? 'curso' : q.apego >= 80 ? '' : q.apego >= 60 ? 'medio' : 'bajo';
+    return `<div><span class="${cls}" style="height:${Math.max(v, 4)}%"></span><small>${q.curso ? 'Actual' : 'S' + q.n}</small></div>`;
+  }).join('');
+
+  // Peso: promedio de cada semana (lunes a domingo). Vale el promedio, nunca un solo día.
+  const porSem = {};
+  c.peso.forEach(([f, kg]) => { const l = lunesDe(f); (porSem[l] = porSem[l] || []).push(kg); });
+  const semPeso = Object.entries(porSem).sort().map(([l, v]) => ({ l, kg: Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10, n: v.length }));
+  let peso;
+  if (semPeso.length >= 2) {
+    const kgs = semPeso.map((s) => s.kg), mn = Math.min(...kgs) - .5, mx = Math.max(...kgs) + .5;
+    const x = (i) => 20 + i * (300 / Math.max(semPeso.length - 1, 1)), y = (kg) => 110 - (kg - mn) / (mx - mn) * 90;
+    const pts = semPeso.map((s, i) => `${x(i)},${y(s.kg)}`).join(' ');
+    const dif = Math.round((kgs[kgs.length - 1] - kgs[0]) * 10) / 10;
+    peso = `<div class="grande">${kgs[kgs.length - 1]} kg</div><div class="sub">Promedio de esta semana · ${dif <= 0 ? '' : '+'}${dif} kg desde el inicio</div>
+      <svg class="peso" viewBox="0 0 340 130"><polyline points="${pts}" fill="none" stroke="#A8FF3E" stroke-width="3" stroke-linejoin="round"/>${semPeso.map((s, i) => `<circle cx="${x(i)}" cy="${y(s.kg)}" r="4" fill="#A8FF3E"/><text x="${x(i)}" y="126" fill="#6E7768" font-size="10" text-anchor="middle">${fechaCorta(s.l)}</text>`).join('')}</svg>`;
+  } else {
+    const ult = c.peso.length ? c.peso[c.peso.length - 1] : null;
+    peso = `<div class="grande">${ult ? ult[1] + ' kg' : '—'}</div><div class="sub">${ult ? 'Último registro: ' + fechaCorta(ult[0]) : 'Aún no hay registros.'}</div>
+      <div class="sub" style="margin-top:10px">Pésate todos los días al despertar, en ayunas y en la misma báscula, y regístralo en Trainerize. Con 2 semanas de registros aparece aquí tu gráfica de promedio semanal.</div>`;
+  }
+
+  // Running: mejor 5K o lo más lejos que ha corrido.
+  const m = c.total.mejor;
+  const run = m ? (m.es5k
+    ? `<div class="grande">${esc(m.ritmo)} <span style="font-size:15px;font-weight:500">min/km</span></div><div class="sub">Tu mejor 5K: ${m.km} km en ${Math.round(m.min)} min (${fechaCorta(m.f)})</div>`
+    : `<div class="grande">${m.km} km</div><div class="sub">Tu distancia más larga, en ${Math.round(m.min)} min (${fechaCorta(m.f)})</div>
+       <div class="barra"><i style="width:${Math.min(m.km / 5 * 100, 100)}%"></i></div><div class="chico" style="margin-top:6px">${m.km} de 5 km · Cada semana, un poco más de trote.</div>`)
+    : '<div class="sub">Tu primer running aparecerá aquí.</div>';
+
+  const hechas = c.sesiones.filter((s) => s.hecha && s.f <= D.hoy).slice(-6).reverse();
+  // Logros: la conducta, no solo el resultado.
+  const nFuerza = c.sesiones.filter((s) => s.hecha && s.tipo === 'Fuerza' && /^\w+\./.test(s.t)).length;
+  const nCardio = c.sesiones.filter((s) => s.hecha && s.tipo === 'Cardio').length;
+  let racha = 0;
+  for (const q of c.semanas.filter((x) => !x.curso).reverse()) { if (q.fzHechas >= q.fzMeta && q.fzMeta) racha++; else break; }
+  const logros = `<h2>Tus logros</h2><div class="card"><div class="fila">
+      <div class="mini"><span class="chico">Sesiones de fuerza</span><b>${nFuerza}</b></div>
+      <div class="mini"><span class="chico">Salidas de cardio</span><b>${nCardio}</b></div>
+      <div class="mini"><span class="chico">Km corridos</span><b>${c.total.km || 0}</b></div></div>
+      <div class="sub" style="margin-top:10px">${racha >= 1 ? `🔥 ${racha} ${racha === 1 ? 'semana' : 'semanas seguidas'} con tus 3 sesiones de fuerza.` : 'Esta semana, ve por tus 3 sesiones de fuerza.'}</div></div>`;
+  return `<section data-v="avance">
+    <div class="card"><div class="etq">Tu programa</div><div class="grande">Día ${c.dia} <span style="font-size:16px;color:var(--suave);font-weight:500">de ${c.duracion}</span></div>
+      <div class="sub">${fase}</div><div class="barra"><i style="width:${pctDia}%"></i></div></div>
+    ${meta}${logros}
+    <h2>Cumplimiento</h2>
+    <div class="card"><div class="fila">
+      <div class="mini"><span class="chico">Últimos 30 días</span><b>${u.apego == null ? '—' : u.apego + '%'}</b></div>
+      <div class="mini"><span class="chico">Fuerza</span><b>${u.fzHechas}/${u.fzMeta}</b></div>
+      <div class="mini"><span class="chico">Cardio</span><b>${u.caHechas}/${u.caMeta}</b></div>
+    </div><div class="sub" style="margin-top:10px">${msg}</div>
+    <div class="semanas">${barras}</div></div>
+    <h2>Peso</h2><div class="card">${peso}</div>
+    <h2>Running</h2><div class="card">${run}</div>
+    <h2>Últimas sesiones</h2>
+    <div class="card"><ul class="lista">${hechas.map((s) => `<li><span>${esc(s.tipo === 'Cardio' ? s.t : sesionDe(s.t).nombre)}</span><span class="ok">${fechaCorta(s.f)} ✓</span></li>`).join('') || '<li class="no">Aún no hay sesiones.</li>'}</ul></div>
+  </section>`;
+}
+
+// ---------- NUTRICIÓN ----------
+function vistaComida() {
+  const x = D.extra;
+  const nums = x.kcal
+    ? `<div class="fila"><div class="mini"><span class="chico">Calorías al día</span><b>${esc(Number(x.kcal).toLocaleString('es-MX'))}</b></div>${x.proteina ? `<div class="mini"><span class="chico">Proteína al día</span><b>${esc(x.proteina)} g</b></div>` : ''}</div>`
+    :'<div class="sub">Tus números base (calorías y proteína) se cargarán aquí en tu siguiente ajuste. Mientras tanto, consulta tu PDF de Números Base.</div>';
+  // Reparto por comida y ejemplos de proteína: del PDF de Números Base del cliente (datos/app.json).
+  const reparto = (x.comidas || []).length ? `<h2>Tu día, comida por comida</h2><div class="card"><ul class="lista">${x.comidas.map((m) => `<li><span><b>${esc(m.n)}</b></span><span class="ok">${esc(m.kcal)} kcal · ${esc(m.prot)} g prot</span></li>`).join('')}</ul>
+      ${(x.ejemplosProteina || []).length ? `<div class="etq" style="margin-top:14px">Cómo llegar a tu proteína en una comida</div><ul class="lista" style="margin-top:4px">${x.ejemplosProteina.map(([a, g]) => `<li><span>${esc(a)}</span><span class="chico">${esc(g)}</span></li>`).join('')}</ul>` : ''}</div>` : '';
+  const importante = (x.importante || []).length ? `<div class="card"><div class="etq">Lo más importante</div><ul class="lista" style="margin-top:4px">${x.importante.map((t) => `<li><span>✓ ${esc(t)}</span></li>`).join('')}</ul></div>` : '';
+  const frases = [
+    'Arma mi plan de comidas de la semana con mis números base.',
+    'Me voy a comer esto y no quiero pasarme de las calorías de esta comida.',
+    'Ajusta las porciones de mi plan y agrega una colación entre las comidas, manteniendo los mismos alimentos.',
+  ];
+  return `<section data-v="comida">
+    <div class="card hero"><div class="etq">Tus números</div><div style="margin-top:10px">${nums}</div>
+      <div class="sub" style="margin-top:10px">Lo más importante es la cantidad: llegar a tu proteína y no pasarte de tus calorías. Se evalúa el promedio de la semana, nunca un solo día.</div>
+      <a class="btn lima" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición ASF</a></div>
+    ${reparto}${importante}
+    <h2>Tu comida de hoy</h2>
+    <div class="card" id="registro"><div class="sub">Marca cada comida al terminarla. No necesitas calcular nada: solo indica si fue del plan.</div>
+      <ul class="lista" style="margin-top:6px">${['Desayuno', 'Comida', 'Cena', 'Colación'].map((n) => `<li style="align-items:center"><span>${n}</span><span class="chips" style="margin:0;flex-wrap:nowrap" data-comida="${n}"><button class="chip" data-v="plan" style="padding:6px 10px">Del plan</button><button class="chip" data-v="fuera" style="padding:6px 10px">Fuera del plan</button></span></li>`).join('')}
+        <li style="align-items:center"><span>Llegué a mi proteína</span><span class="chips" style="margin:0" data-comida="Proteína"><button class="chip" data-v="plan" style="padding:6px 10px">Sí</button><button class="chip" data-v="fuera" style="padding:6px 10px">No</button></span></li></ul>
+      <div class="resultado on" id="resComida"></div>
+      <div class="chico" style="margin-top:8px">Versión beta: por ahora el registro se guarda solo en este dispositivo.</div></div>
+    <h2>Cómo usar la IA de Nutrición</h2>
+    <div class="card"><ol class="pasos">
+      <li><b>Comparte tus números:</b> envía una captura de tu PDF de Números Base y la IA arma tu plan de la semana.</li>
+      <li><b>Antes de comer fuera:</b> envía una foto del platillo y te indica qué porción cabe en esa comida.</li>
+      <li><b>Para variar tu menú:</b> pide otras opciones con los mismos números o tu meal prep de la semana.</li>
+    </ol></div>
+    <h2>Mensajes listos para la IA</h2>
+    <div class="card"><div class="sub">Toca un mensaje para copiarlo y pégalo en el chat, junto con tu foto o tus números.</div>
+      ${frases.map((f) => `<button class="copiar" data-copiar="${esc(f)}">${esc(f)}<em>Copiar</em></button>`).join('')}</div>
+    <h2>Regla del plato</h2>
+    <div class="card"><div class="sub">Para cuando no tienes foto ni báscula.</div>
+      <div class="plato">
+        <div><span class="ico">🍗</span><b>Proteína primero</b>Del tamaño de tu palma; dos si es tu comida fuerte.</div>
+        <div><span class="ico">🥦</span><b>Verdura libre</b>Casi no tiene calorías: come la que quieras.</div>
+        <div><span class="ico">🍚</span><b>Carbohidrato</b>Una porción del tamaño de tu puño.</div>
+        <div><span class="ico">💧</span><b>Lo mínimo</b>Aceites y aderezos al mínimo. Bebida sin calorías.</div>
+      </div></div>
+    <h2>Porciones sin báscula</h2>
+    <div class="card"><div class="sub">Tu mano es tu medida y siempre la llevas contigo.</div>
+      <ul class="lista" style="margin-top:6px">
+        <li><span>✋ <b>Palma</b></span><span class="chico" style="text-align:right">Proteína: pollo, carne, pescado, huevo, panela</span></li>
+        <li><span>✊ <b>Puño</b></span><span class="chico" style="text-align:right">Carbohidrato: arroz, pasta, papa, tortillas, fruta</span></li>
+        <li><span>🤲 <b>Libre</b></span><span class="chico" style="text-align:right">Verdura</span></li>
+        <li><span>👍 <b>Pulgar</b></span><span class="chico" style="text-align:right">Grasa: aceite, aguacate, crema, nueces</span></li>
+      </ul><div class="chico">Con báscula de cocina es más exacto: pesa tu comida unas semanas y después podrás calcularla a ojo.</div></div>
+    <h2>¿No tienes un alimento del plan?</h2>
+    <div class="card"><div class="sub">Cámbialo por otro <b style="color:var(--texto)">del mismo grupo</b> y en la misma porción.</div>
+      <ul class="lista" style="margin-top:6px">
+        <li><span><b>Proteína</b><br><span class="chico">Pollo · atún · huevo · carne magra · pescado · panela · yogur griego natural</span></span></li>
+        <li><span><b>Carbohidrato</b><br><span class="chico">Arroz · pasta · papa · tortilla · avena · pan integral · fruta</span></span></li>
+        <li><span><b>Grasa</b><br><span class="chico">Aguacate · aceite de oliva · nueces · cacahuates · queso</span></span></li>
+      </ul>
+      <button class="copiar" data-copiar="No tengo este alimento de mi plan. Dame 3 alternativas que tengan la misma proteína y calorías, con la porción exacta.">Dame 3 alternativas con la misma proteína y calorías.<em>Copiar</em></button></div>
+    <h2>Comer fuera, eventos o juntas</h2>
+    <div class="card"><div class="sub">Cambia la comida, no tu objetivo.</div>
+      <ol class="pasos">
+        <li><b>Traes tu comida del plan:</b> cómela normalmente.</li>
+        <li><b>No la traes, pero puedes elegir:</b> pide algo con proteína y verdura, y envía una foto a la IA antes de comer.</li>
+        <li><b>No puedes elegir</b> (junta, evento, invitación): envía una foto a la IA y te indicará qué porción comer.</li>
+        <li><b>No puedes usar el celular:</b> aplica la regla del plato.</li>
+        <li><b>Ya comiste de más:</b> sin culpa. Ajusta tus siguientes comidas del día y mañana retoma tu plan. Sin ayunos.</li>
+      </ol>
+      <div class="chico">Antes de un evento, no llegues con hambre: come algo con proteína.</div></div>
+    ${vistaAlcohol()}
+    <div class="card"><div class="etq">En la tienda de conveniencia</div><div class="sub" style="margin-top:6px">Atún, yogur griego natural, queso panela, huevo cocido, fruta o barra de proteína.</div></div>
+  </section>`;
+}
+
+// ---------- ALCOHOL (producto/contingencia/protocolo-contingencia.md, aprobado por Angel el 4 nov 2026) ----------
+const BEBIDAS = [
+  ['destilado', 'Destilado 45 ml', 'Tequila, mezcal, whisky, vodka, ginebra o ron, con agua mineral', 100],
+  ['vino', 'Copa de vino seco', '150 ml, tinto o blanco', 120],
+  ['cerveza', 'Cerveza', 'Incluida la light', 130],
+  ['coctel', 'Coctel o michelada', 'Margarita, piña colada, licores cremosos', 300],
+  ['mezclador', 'Refresco normal o jugo', 'Como mezclador, por vaso', 100],
+];
+function vistaAlcohol() {
+  return `<h2>Alcohol en eventos y comidas de trabajo</h2>
+    <div class="card hero"><div class="etq">La regla</div>
+      <div class="sub" style="color:var(--texto);margin-top:6px">Lo mejor es no tomar. Si vas a tomar: <b>máximo 2 tragos de destilado</b> con agua mineral o refresco sin calorías. Sin cerveza ni cocteles.</div>
+      <div class="sub" style="margin-top:8px">Ninguna bebida ayuda a bajar de peso: elige la que menos frene tu avance.</div></div>
+    <div class="card"><div class="etq">Qué pedir</div>
+      <ul class="lista" style="margin-top:6px">
+        <li><span><b>La mejor opción</b><br><span class="chico">Agua mineral con limón</span></span><span class="ok">0 kcal</span></li>
+        <li><span><b>Si vas a tomar</b><br><span class="chico">Tequila, mezcal, whisky, vodka, ginebra o ron (45 ml), solo, en las rocas o con agua mineral</span></span><span class="ok">100 c/u</span></li>
+        <li><span><b>Si solo hay vino</b><br><span class="chico">Una copa de vino seco (150 ml)</span></span><span style="color:var(--ambar)">120</span></li>
+        <li><span><b>Evitar</b><br><span class="chico">Cerveza, incluida la light: es fácil tomar de más</span></span><span style="color:var(--rojo)">100-150</span></li>
+        <li><span><b>Evitar</b><br><span class="chico">Michelada, margarita, piña colada, cocteles dulces y licores cremosos</span></span><span style="color:var(--rojo)">200-400+</span></li>
+        <li><span><b>Evitar</b><br><span class="chico">Refresco normal, jugo o agua tónica como mezclador</span></span><span style="color:var(--rojo)">+100</span></li>
+      </ul>
+      <button class="copiar" data-copiar="Un tequila con agua mineral y limón, por favor.">Un tequila con agua mineral y limón, por favor.<em>Copiar</em></button></div>
+    <div class="card" id="contador"><div class="etq">Contador de tragos</div>
+      <div class="sub" style="margin-top:4px">Regístralos y te mostramos cuántas calorías llevas.</div>
+      <ul class="lista" style="margin-top:6px">${BEBIDAS.map(([k, n, d, kcal]) => `<li style="align-items:center"><span><b>${esc(n)}</b><br><span class="chico">${esc(d)} · ${kcal} kcal</span></span>
+        <span style="display:flex;align-items:center;gap:8px;flex:none"><button class="chip" data-menos="${k}" style="padding:6px 12px">−</button><b data-n="${k}" style="min-width:16px;text-align:center">0</b><button class="chip" data-mas="${k}" style="padding:6px 12px">+</button></span></li>`).join('')}</ul>
+      <div class="resultado on" id="totalAlcohol"></div></div>
+    <div class="card"><div class="etq">Cómo llevarlo a cabo</div>
+      <ol class="pasos">
+        <li><b>Antes de llegar:</b> decide tu máximo de 2 tragos y come algo con proteína.</li>
+        <li><b>Al llegar:</b> pide primero tu agua mineral y después tu bebida.</li>
+        <li><b>Al pedir:</b> "Un tequila con agua mineral y limón".</li>
+        <li><b>Durante la comida:</b> toma un vaso de agua entre cada trago y elige proteína con verdura.</li>
+        <li><b>Si insisten:</b> pide agua mineral con limón en vaso corto, o quédate con tu trago a medias.</li>
+        <li><b>Al cerrar el día:</b> resta esas calorías de tus carbohidratos o grasas, nunca de tu proteína.</li>
+        <li><b>Al día siguiente:</b> retoma tu plan normal y haz tu sesión.</li>
+      </ol>
+      <div class="chico">No dejes de comer para "guardar" calorías para el alcohol.</div></div>
+    <div class="card"><div class="etq">Pide ayuda a la IA</div>
+      <button class="copiar" data-copiar="Hoy tengo una comida de trabajo y voy a tomar 2 tragos de destilado. Ajusta mis comidas de hoy para no pasarme de mis calorías y llegar a mi proteína.">Hoy tengo una comida de trabajo y tomaré 2 tragos: ajusta mis comidas del día.<em>Copiar</em></button>
+      <button class="copiar" data-copiar="Me voy a comer esto y voy a tomar esto. No quiero pasarme de las calorías de esta comida; dime qué porción comer.">Foto del platillo y la bebida: dime qué porción comer.<em>Copiar</em></button>
+      <a class="btn borde" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición</a></div>`;
+}
+// Registro de comida del día (beta): solo en el navegador de quien la usa, nunca llega a las hojas.
+const claveComida = () => `asf-comida-${D.cliente.id}-${D.hoy}`;
+const leerComida = () => { try { return JSON.parse(localStorage.getItem(claveComida())) || {}; } catch (e) { return {}; } };
+function pintarComida() {
+  const r = leerComida(), el = document.getElementById('resComida'); if (!el) return;
+  document.querySelectorAll('[data-comida]').forEach((g) => g.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', r[g.dataset.comida] === b.dataset.v)));
+  const comidas = ['Desayuno', 'Comida', 'Cena', 'Colación'].filter((k) => r[k]);
+  const plan = comidas.filter((k) => r[k] === 'plan').length;
+  if (!comidas.length && !r['Proteína']) { el.innerHTML = '<p>Aún no registras comidas hoy. Un paso a la vez.</p>'; return; }
+  const msg = comidas.length && plan === comidas.length ? 'Todo dentro del plan. Excelente 💪' : plan ? 'Vas bien. Una comida fuera del plan no arruina el día: ajusta la siguiente.' : comidas.length ? 'Sin problema: que tu siguiente comida sea del plan.' : '';
+  el.innerHTML = `<h3>${plan} de ${comidas.length} comidas del plan</h3><p>${msg}${r['Proteína'] === 'plan' ? ' Proteína cumplida ✓' : r['Proteína'] === 'fuera' ? ' Pide a la IA una opción alta en proteína para lo que resta del día.' : ''}</p>`;
+}
+const tragos = {};
+function pintarAlcohol() {
+  const el = document.getElementById('totalAlcohol'); if (!el) return;
+  let kcal = 0, n = 0, malos = 0;
+  BEBIDAS.forEach(([k, , , c]) => { const v = tragos[k] || 0; kcal += v * c; if (k !== 'mezclador') n += v; if (['cerveza', 'coctel', 'mezclador'].includes(k)) malos += v; const b = document.querySelector(`[data-n="${k}"]`); if (b) b.textContent = v; });
+  if (!kcal) { el.innerHTML = '<p>Sin bebidas registradas. Agua mineral con limón: 0 kcal 💪</p>'; el.style.background = ''; return; }
+  const consejo = n > 2 ? 'Superaste los 2 tragos: a partir de aquí, solo agua mineral. Mañana retomas tu plan normal.'
+    : malos ? 'Para la siguiente, mejor un destilado con agua mineral.' : n === 2 ? 'Llegaste a tu máximo: a partir de aquí, agua mineral.' : 'Vas bien. Toma un vaso de agua antes de la siguiente.';
+  el.innerHTML = `<h3>${kcal} kcal</h3><p>${n} ${n === 1 ? 'bebida' : 'bebidas'} · ${esc(consejo)}</p><p class="chico">Al cerrar el día, resta esas ${kcal} kcal de tus carbohidratos o grasas, nunca de tu proteína.</p>`;
+}
+
+// ---------- AYUDA RÁPIDA (solo lo que contesta la IA en servicio/problemas-y-soluciones.md) ----------
+const AYUDA = [
+  ['Agenda y tiempo', [
+    ['Tengo mucho trabajo y no me da tiempo de entrenar', 'Es normal tener semanas así. Busca otro momento del día; si no tienes 45 minutos, con el Express de 20 cumples. Si tampoco es posible, haz el Salvavidas de 10 minutos y repón la sesión antes del domingo.'],
+    ['Llego muy tarde y cansado', 'Esa semana entrena en casa por la mañana, antes de salir. Así no dependes de cómo llegues en la noche.'],
+    ['Hoy no tengo ganas', 'Haz al menos el Express. Lo importante es no saltarte el día: con eso tu semana sigue en pie.'],
+    ['Me faltó una sesión de la semana', 'Hazla el siguiente día disponible, antes del domingo. Si no alcanzas, no pasa nada: el lunes empiezas desde cero, sin pendientes.'],
+    ['Quiero hacer dos sesiones hoy para reponer', 'Mejor no: nunca hagas dos sesiones de fuerza el mismo día. Repón la sesión otro día antes del domingo.'],
+    ['Hice la sesión a medias', 'Así como la hiciste, cuenta. No necesitas repetirla.'],
+    ['Me voy de viaje unos días', 'Si el hotel tiene gimnasio, entrena ahí. Si no, usa tus bandas o haz el Plan C sin equipo en tu habitación (30 minutos).'],
+    ['Me salió un imprevisto de trabajo', 'Ve a Hoy → "¿Se complicó tu día?". Indica cuánto tiempo y qué equipo tienes, y la app te dice qué hacer. Con el Express de 20 minutos cumples.'],
+    ['Quiero entrenar todo en casa', 'Puedes hacerlo: la misma sesión con bandas, mancuernas o sin equipo (Plan C), y el cardio con el Plan D o E. Todos están en tu app.'],
+    ['Dormí mal', 'Hoy haz el Express de 20 minutos en lugar de la sesión completa.'],
+  ]],
+  ['Ejercicios y app', [
+    ['No sé cómo hacer un ejercicio', 'Revisa el video del ejercicio en la app. Si sigues con dudas, escríbeme por WhatsApp.'],
+    ['¿Subo el peso o lo dejo igual?', 'Si ya completas todas las series con buena técnica, sube lo mínimo y vuelve al rango bajo de repeticiones.'],
+    ['El peso se siente demasiado', 'Bájalo un poco y haz 8 a 10 repeticiones; también cuenta. Si la última serie no sale, descansa 30 a 60 segundos más.'],
+    ['¿Cómo se hace una superserie?', 'Haz los dos ejercicios seguidos (2a y 2b) y después descansa, en el orden que marca la app.'],
+    ['No está la máquina o el equipo', 'Cámbialo por otro ejercicio del mismo movimiento, con las mismas series. Si tienes dudas, pregúntame.'],
+    ['Olvidé guardar el entrenamiento', 'No hay problema: envíame una foto de lo que hiciste y lo registramos.'],
+    ['¿Cómo conecto mi reloj?', 'En la app: toca tu foto de perfil (arriba a la izquierda) → Sync Apple Health.'],
+  ]],
+  ['Running', [
+    ['¿A qué ritmo debo correr?', 'A un ritmo en el que puedas platicar. Si te cansas, camina un poco y vuelve a trotar.'],
+    ['Llueve o no puedo salir', '30 minutos de caminadora, escaladora o cuerda (Plan D); sin equipo, cardio con peso corporal (Plan E). Cuenta como tu running.'],
+    ['No me da tiempo para los 5 km', 'Si tienes tiempo, corre los 5 km; si no, 30 minutos de cardio también cuentan.'],
+    ['¿Mi deporte cuenta como cardio?', 'Sí: 30 minutos o más de natación, voleibol, bici o pádel cuentan como tu salida de cardio.'],
+    ['¿Puedo correr el día antes de pierna?', 'Es mejor correr después de un día de tren superior, para llegar con piernas frescas a tu sesión de pierna.'],
+  ]],
+  ['Peso', [
+    ['¿Cómo debo pesarme?', 'Todos los días al despertar, en ayunas, siempre en la misma báscula, y regístralo en la app.'],
+    ['Subí de peso de un día a otro', 'Es normal. Lo que importa es el promedio de la semana.'],
+    ['Distintas básculas dan números distintos', 'Usa solo la de tu casa, todos los días en ayunas. Así el promedio es confiable.'],
+  ]],
+  ['Nutrición', [
+    ['¿De qué tamaño es una porción?', 'Usa tu mano: proteína del tamaño de tu palma, carbohidrato de tu puño, grasa de tu pulgar y verdura libre. Lo encuentras en Nutrición.'],
+    ['No tengo un alimento del plan', 'Cámbialo por otro del mismo grupo y en la misma porción (proteína por proteína, carbohidrato por carbohidrato), o pide 3 alternativas a la IA.'],
+    ['Tengo hambre entre comidas', 'Come más verdura. Pepino, jícama con limón, apio, fresas o gelatina light casi no tienen calorías.'],
+    ['¿Qué puedo tomar?', 'Todo lo que no tenga calorías: agua, agua mineral, café americano solo o bebidas zero. Evita los jugos.'],
+    ['Me ofrecen comida en la oficina', 'Di que no antes de pensarlo. Que te conozcan como quien no acepta.'],
+    ['No llego a mi proteína', 'Pide a la IA de Nutrición que incluya un scoop de proteína en tu día.'],
+    ['Me salí del plan el fin de semana', 'Fue solo un día. Sin culpa ni ayunos: ajusta tus siguientes comidas y continúa normal. El fin de semana es donde más se nota el resultado.'],
+    ['Tengo un evento y voy a tomar', 'Lo mejor es no tomar. Si tomas, máximo 2 tragos de destilado con agua mineral, sin cerveza ni cocteles. Come algo con proteína antes; en Nutrición tienes el contador de tragos.'],
+    ['¿Qué pido en una comida de trabajo?', 'Primero agua mineral con limón. Después, si tomas, un tequila o mezcal con agua mineral. Si solo hay vino, una copa de vino seco.'],
+    ['Me insisten en que tome más', 'Pide agua mineral con limón en vaso corto, o quédate con tu trago a medias. Nadie nota la diferencia.'],
+    ['Ayer tomé de más', 'No pasa nada. Hoy retoma tu plan normal y haz tu sesión. Sin ayunos ni castigos.'],
+    ['El plan de la IA no trae colaciones', 'Pídele: "Ajusta las porciones de mi plan y agrega una colación entre las comidas, manteniendo los mismos alimentos".'],
+  ]],
+];
+
+function vistaAyuda() {
+  return `<section data-v="ayuda">
+    <input class="buscar" id="buscar" placeholder="Buscar: viaje, peso, hambre, correr…" autocomplete="off">
+    <div id="ayudas">${AYUDA.map(([g, l]) => `<div class="grupo">${esc(g)}</div>${l.map(([q, r]) => `<details data-q="${esc((q + ' ' + r).toLowerCase())}"><summary>${esc(q)}</summary><div class="resp"><p>${esc(r)}</p></div></details>`).join('')}`).join('')}</div>
+    <div class="card" style="margin-top:14px"><div class="etq">Salud, dolor o pagos</div><div class="sub" style="margin-top:6px">Esos temas los atiendo personalmente: escríbeme directo por WhatsApp.</div></div>
+  </section>`;
+}
+
+// ---------- RECURSOS ----------
+function vistaRecursos() {
+  const wa = D.whatsapp ? `https://wa.me/${D.whatsapp}` : 'https://wa.me/';
+  return `<section data-v="recursos">
+    <a class="recurso" href="recursos/protocolo.pdf" target="_blank"><div class="ic">🧭</div><div><b>Protocolo de Contingencia</b><span>Qué hacer cuando tu día se complica</span></div></a>
+    <a class="recurso" href="recursos/guia.pdf" target="_blank"><div class="ic">📘</div><div><b>Guía del Cliente</b><span>Cómo funciona tu programa</span></div></a>
+    <a class="recurso" href="recursos/meal-prep.pdf" target="_blank"><div class="ic">🥗</div><div><b>Guía de Meal Prep</b><span>Tu comida de la semana en una tarde</span></div></a>
+    <a class="recurso" href="${TRAINERIZE}" target="_blank" rel="noopener"><div class="ic">💪</div><div><b>Trainerize</b><span>Tus rutinas, peso y fotos</span></div></a>
+    <a class="recurso" href="${GPT}" target="_blank" rel="noopener"><div class="ic">🤖</div><div><b>IA de Nutrición ASF</b><span>Tu plan de comidas y porciones por foto</span></div></a>
+    <a class="recurso" href="${wa}" target="_blank" rel="noopener"><div class="ic">💬</div><div><b>WhatsApp con Angel</b><span>Dudas, salud y ajustes</span></div></a>
+  </section>`;
+}
+
+// ---------- NAVEGACIÓN ----------
+let tabActual = 'hoy';
+function activar(t) {
+  tabActual = t;
+  document.querySelectorAll('section[data-v]').forEach((s) => s.classList.toggle('on', s.dataset.v === t));
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+  const sc = document.querySelector('.scroll'); sc.scrollTop = 0; window.scrollTo(0, 0);
+}
+document.getElementById('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) activar(b.dataset.t); });
+
+function conectar() {
+  document.querySelectorAll('#arbol .chips').forEach((g) => g.addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    g.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === b));
+    if (g.dataset.g === 'tiempo') {
+      const eq = document.querySelector('#arbol [data-g=equipo]');
+      if (!eq.querySelector('.on')) { const d = eq.querySelector(`[data-v="${document.getElementById('arbol').dataset.equipo}"]`); if (d) d.classList.add('on'); }
+    }
+    resolverArbol();
+  }));
+  document.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copiar); } catch (e) {}
+    const em = b.querySelector('em'); em.textContent = 'Copiado ✓'; setTimeout(() => { em.textContent = 'Copiar'; }, 1500);
+  }));
+  document.getElementById('contador').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mas],[data-menos]'); if (!b) return;
+    const k = b.dataset.mas || b.dataset.menos;
+    tragos[k] = Math.max(0, (tragos[k] || 0) + (b.dataset.mas ? 1 : -1));
+    pintarAlcohol();
+  });
+  pintarAlcohol();
+  document.getElementById('registro').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'), g = b && b.closest('[data-comida]'); if (!g) return;
+    const r = leerComida(), k = g.dataset.comida;
+    r[k] = r[k] === b.dataset.v ? undefined : b.dataset.v;
+    try { localStorage.setItem(claveComida(), JSON.stringify(r)); } catch (err) {}
+    pintarComida();
+  });
+  pintarComida();
+  const bus = document.getElementById('buscar');
+  bus.addEventListener('input', () => {
+    const q = bus.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    document.querySelectorAll('#ayudas details').forEach((d) => { d.style.display = !q || d.dataset.q.normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q) ? '' : 'none'; });
+    document.querySelectorAll('#ayudas .grupo').forEach((g) => {
+      let n = g.nextElementSibling, alguno = false;
+      while (n && n.tagName === 'DETAILS') { if (n.style.display !== 'none') alguno = true; n = n.nextElementSibling; }
+      g.style.display = alguno ? '' : 'none';
+    });
+  });
+}
+
+window.addEventListener('hashchange', cargar);
+cargar();
+setInterval(() => { if (document.visibilityState === 'visible') cargar(); }, 10 * 60e3);
+</script>
+</body>
+</html>

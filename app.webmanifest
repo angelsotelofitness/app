@@ -1,0 +1,16 @@
+{
+  "name": "ASF Training",
+  "short_name": "ASF",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0B0D0A",
+  "theme_color": "#0B0D0A",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "scope": "./"
+}
