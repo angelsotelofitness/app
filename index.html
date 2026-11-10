@@ -209,6 +209,28 @@ function pedirClave(codigo, error) {
   document.getElementById('clave').onkeydown = (e) => { if (e.key === 'Enter') ir(); };
 }
 
+// Sin código (p. ej. el acceso de la pantalla de inicio se abrió sin el link): el cliente pega su link una vez.
+function pedirLink(error) {
+  document.getElementById('main').innerHTML = `<section><div class="card" style="margin-top:24px">
+    <div class="etq">Bienvenido</div>
+    <h2 style="margin:6px 0 8px">Tu app ASF Training</h2>
+    <div class="sub">Pega aquí el link que te compartió Angel. Solo se pide la primera vez.</div>
+    <input id="link" autocomplete="off" placeholder="https://angelsotelofitness.github.io/app/#…" style="width:100%;margin-top:14px;padding:14px;border-radius:12px;border:1px solid var(--linea);background:var(--fondo,#0B0D0A);color:var(--texto);font:500 14px Poppins,sans-serif;box-sizing:border-box">
+    ${error ? `<div class="chico" style="color:#ff7a7a;margin-top:8px">${esc(error)}</div>` : ''}
+    <button id="seguir" class="btn lima">Continuar</button>
+  </div></section>`;
+  const ir = () => {
+    const v = document.getElementById('link').value.trim();
+    const codigo = (v.split('#')[1] || v).trim();
+    if (!/^[A-Za-z0-9]{16,}$/.test(codigo)) return pedirLink('Ese link no parece correcto. Cópialo completo del mensaje de Angel.');
+    guarda('asf-codigo', codigo);
+    history.replaceState(null, '', '#' + codigo);
+    cargar();
+  };
+  document.getElementById('seguir').onclick = ir;
+  document.getElementById('link').onkeydown = (e) => { if (e.key === 'Enter') ir(); };
+}
+
 function listo() {
   if (D.error) { document.getElementById('main').innerHTML = `<div class="aviso">${esc(D.error)}</div>`; return; }
   if (!LOCAL) D.hoy = hoyCDMX(); // la sesión de hoy se calcula con la fecha real del celular, no con la del día en que se publicó
@@ -224,7 +246,7 @@ async function cargar() {
     return listo();
   }
   const codigo = location.hash.slice(1) || lee('asf-codigo');
-  if (!codigo) { document.getElementById('main').innerHTML = '<div class="aviso">Abre la app desde el link que te compartió Angel.</div>'; return; }
+  if (!codigo) return pedirLink();
   guarda('asf-codigo', codigo);
   const clave = lee('asf-clave-' + codigo);
   if (!clave) return pedirClave(codigo);
