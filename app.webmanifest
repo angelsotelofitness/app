@@ -6,9 +6,10 @@
   "theme_color": "#0B0D0A",
   "icons": [
     {
-      "src": "logo.png",
+      "src": "icono.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "scope": "./"
