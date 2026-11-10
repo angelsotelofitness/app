@@ -195,7 +195,7 @@ function pedirClave(codigo, error) {
     const v = document.getElementById('clave').value;
     if (!v.trim()) return;
     document.getElementById('entrar').textContent = 'Abriendo…';
-    try { D = await descifrar(codigo, v); guarda('asf-clave', v.trim().toUpperCase()); listo(); }
+    try { D = await descifrar(codigo, v); guarda('asf-clave-' + codigo, v.trim().toUpperCase()); listo(); }
     catch (e) { pedirClave(codigo, e.message === 'sin-archivo' ? 'No encontré tus datos. Pídele a Angel tu link de nuevo.' : 'La clave no es correcta. Revísala e intenta otra vez.'); }
   };
   document.getElementById('entrar').onclick = ir;
@@ -219,10 +219,10 @@ async function cargar() {
   const codigo = location.hash.slice(1) || lee('asf-codigo');
   if (!codigo) { document.getElementById('main').innerHTML = '<div class="aviso">Abre la app desde el link que te compartió Angel.</div>'; return; }
   guarda('asf-codigo', codigo);
-  const clave = lee('asf-clave');
+  const clave = lee('asf-clave-' + codigo);
   if (!clave) return pedirClave(codigo);
   try { D = await descifrar(codigo, clave); listo(); }
-  catch (e) { guarda('asf-clave', null); pedirClave(codigo); }
+  catch (e) { guarda('asf-clave-' + codigo, null); pedirClave(codigo); }
 }
 
 function pintar() {
