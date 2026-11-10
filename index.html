@@ -32,7 +32,7 @@ body { min-height: 100vh; display: flex; justify-content: center; }
   nav { position: absolute !important; }
 }
 .scroll::-webkit-scrollbar { width: 0; }
-header { padding: 22px 20px 6px; display: flex; align-items: center; gap: 12px; }
+header { padding: calc(22px + env(safe-area-inset-top)) 20px 6px; /* iPhone: deja libre el notch y la barra de estado */ display: flex; align-items: center; gap: 12px; }
 header img { width: 42px; height: 42px; object-fit: contain; }
 header .hola { font-size: 13px; color: var(--suave); }
 header h1 { margin: 0; font-size: 21px; font-weight: 700; line-height: 1.15; }
