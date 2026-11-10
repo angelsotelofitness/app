@@ -134,7 +134,14 @@ svg.peso { width: 100%; height: 130px; margin-top: 10px; }
 </div>
 <script>
 const GPT = 'https://chatgpt.com/g/g-699919b6676881919688a6829ba3d004-asf-nutricion-ia';
-const TRAINERIZE = 'https://angelsotelofitness.trainerize.com';
+// Trainerize no tiene links que abran su app. En Android se abre la app directo (si no está, va a Google Play);
+// en iPhone se abre su ficha de la App Store, que trae el botón "Abrir"; en la PC, la versión web.
+const TRAINERIZE = (() => {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return 'intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.trainerize.Trainerize;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=com.trainerize.Trainerize') + ';end';
+  if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'https://apps.apple.com/mx/app/id516851502';
+  return 'https://angelsotelofitness.trainerize.com';
+})();
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mas = (f, n) => { const d = new Date(f + 'T12:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv'); };
 const lunesDe = (f) => mas(f, -((new Date(f + 'T12:00').getDay() + 6) % 7));
@@ -447,12 +454,7 @@ function vistaComida() {
       <div class="sub" style="margin-top:10px">Lo más importante es la cantidad: llegar a tu proteína y no pasarte de tus calorías. Se evalúa el promedio de la semana, nunca un solo día.</div>
       <a class="btn lima" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición ASF</a></div>
     ${reparto}${importante}
-    <h2>Tu comida de hoy</h2>
-    <div class="card" id="registro"><div class="sub">Marca cada comida al terminarla. No necesitas calcular nada: solo indica si fue del plan.</div>
-      <ul class="lista" style="margin-top:6px">${['Desayuno', 'Comida', 'Cena', 'Colación'].map((n) => `<li style="align-items:center"><span>${n}</span><span class="chips" style="margin:0;flex-wrap:nowrap" data-comida="${n}"><button class="chip" data-v="plan" style="padding:6px 10px">Del plan</button><button class="chip" data-v="fuera" style="padding:6px 10px">Fuera del plan</button></span></li>`).join('')}
-        <li style="align-items:center"><span>Llegué a mi proteína</span><span class="chips" style="margin:0" data-comida="Proteína"><button class="chip" data-v="plan" style="padding:6px 10px">Sí</button><button class="chip" data-v="fuera" style="padding:6px 10px">No</button></span></li></ul>
-      <div class="resultado on" id="resComida"></div>
-      <div class="chico" style="margin-top:8px">Versión beta: por ahora el registro se guarda solo en este dispositivo.</div></div>
+    ${vistaDia()}
     <h2>Cómo usar la IA de Nutrición</h2>
     <div class="card"><ol class="pasos">
       <li><b>Comparte tus números:</b> envía una captura de tu PDF de Números Base y la IA arma tu plan de la semana.</li>
@@ -545,18 +547,173 @@ function vistaAlcohol() {
       <button class="copiar" data-copiar="Me voy a comer esto y voy a tomar esto. No quiero pasarme de las calorías de esta comida; dime qué porción comer.">Foto del platillo y la bebida: dime qué porción comer.<em>Copiar</em></button>
       <a class="btn borde" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición</a></div>`;
 }
-// Registro de comida del día (beta): solo en el navegador de quien la usa, nunca llega a las hojas.
-const claveComida = () => `asf-comida-${D.cliente.id}-${D.hoy}`;
-const leerComida = () => { try { return JSON.parse(localStorage.getItem(claveComida())) || {}; } catch (e) { return {}; } };
-function pintarComida() {
-  const r = leerComida(), el = document.getElementById('resComida'); if (!el) return;
-  document.querySelectorAll('[data-comida]').forEach((g) => g.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', r[g.dataset.comida] === b.dataset.v)));
-  const comidas = ['Desayuno', 'Comida', 'Cena', 'Colación'].filter((k) => r[k]);
-  const plan = comidas.filter((k) => r[k] === 'plan').length;
-  if (!comidas.length && !r['Proteína']) { el.innerHTML = '<p>Aún no registras comidas hoy. Un paso a la vez.</p>'; return; }
-  const msg = comidas.length && plan === comidas.length ? 'Todo dentro del plan. Excelente 💪' : plan ? 'Vas bien. Una comida fuera del plan no arruina el día: ajusta la siguiente.' : comidas.length ? 'Sin problema: que tu siguiente comida sea del plan.' : '';
-  el.innerHTML = `<h3>${plan} de ${comidas.length} comidas del plan</h3><p>${msg}${r['Proteína'] === 'plan' ? ' Proteína cumplida ✓' : r['Proteína'] === 'fuera' ? ' Pide a la IA una opción alta en proteína para lo que resta del día.' : ''}</p>`;
+// ---------- TU DÍA EN NÚMEROS (beta, 9 nov 2026) ----------
+// Contador de calorías y proteína del día: el cliente suma lo que come y la app le dice cómo repartir
+// lo que le queda en sus siguientes comidas. Valores aproximados por porción casera (tabla de abajo).
+// Se guarda solo en el celular (localStorage), por día; nunca llega a las hojas.
+// Regla de ASF: si se pasa, no se compensa ni se ayuna; se cierra el día con proteína y verdura y mañana plan normal.
+const ALIMENTOS = [
+  ['Proteína', [
+    ['pollo', 'Pechuga de pollo', '1 palma · 120 g cocida', 200, 37],
+    ['res', 'Carne de res magra', '1 palma · 120 g cocida', 250, 34],
+    ['pescado', 'Pescado blanco', '1 filete · 150 g', 150, 32],
+    ['salmon', 'Salmón', '1 palma · 120 g', 250, 25],
+    ['atun', 'Atún en agua', '1 lata drenada', 110, 25],
+    ['huevo', 'Huevo entero', '1 pieza', 75, 6],
+    ['claras', 'Claras de huevo', '3 claras', 50, 11],
+    ['panela', 'Queso panela', '60 g · 2 dedos', 150, 11],
+    ['yogur', 'Yogur griego natural', '1 vaso · 170 g', 100, 17],
+    ['polvo', 'Proteína en polvo', '1 scoop', 120, 24],
+    ['jamon', 'Jamón de pavo', '2 rebanadas', 60, 9],
+  ]],
+  ['Carbohidratos', [
+    ['tortilla', 'Tortilla de maíz', '1 pieza', 60, 2],
+    ['arroz', 'Arroz cocido', '1 puño · 1 taza', 200, 4],
+    ['pasta', 'Pasta cocida', '1 puño · 1 taza', 220, 8],
+    ['papa', 'Papa', '1 mediana', 160, 4],
+    ['pan', 'Pan integral', '1 rebanada', 80, 4],
+    ['avena', 'Avena', '½ taza cruda', 150, 5],
+    ['frijol', 'Frijoles', '½ taza', 120, 8],
+    ['fruta', 'Fruta', '1 pieza o 1 taza', 90, 1],
+  ]],
+  ['Grasas', [
+    ['aguacate', 'Aguacate', '¼ de pieza · 1 pulgar', 80, 1],
+    ['aceite', 'Aceite', '1 cucharada', 120, 0],
+    ['nueces', 'Nueces o almendras', '1 puñito · 30 g', 180, 6],
+    ['cacahuate', 'Crema de cacahuate', '1 cucharada', 95, 4],
+    ['queso', 'Queso amarillo u Oaxaca', '30 g', 110, 7],
+  ]],
+  ['Verdura', [
+    ['verdura', 'Verdura', '1 taza · libre', 25, 2],
+  ]],
+  ['Comida fuera', [
+    ['taco', 'Taco (pastor, bistec, suadero)', '1 pieza', 150, 8],
+    ['quesadilla', 'Quesadilla con queso', '1 pieza', 250, 12],
+    ['torta', 'Torta', '1 pieza', 650, 30],
+    ['hamburguesa', 'Hamburguesa con papas', '1 orden', 1000, 35],
+    ['pizza', 'Pizza', '1 rebanada', 285, 12],
+    ['sushi', 'Sushi empanizado o con queso', '1 rollo', 600, 18],
+    ['enchiladas', 'Enchiladas', '3 piezas', 500, 22],
+    ['chilaquiles', 'Chilaquiles con pollo', '1 plato', 700, 30],
+    ['pandulce', 'Pan dulce', '1 pieza', 350, 6],
+    ['botana', 'Papas, galletas o dulces', '1 bolsa chica', 200, 2],
+    ['refresco', 'Refresco normal o jugo', '1 lata o vaso', 140, 0],
+    ['cafe', 'Café con leche y azúcar', '1 taza mediana', 150, 6],
+  ]],
+];
+const ALIM = {}; ALIMENTOS.forEach(([, l]) => l.forEach((a) => { ALIM[a[0]] = a; }));
+const claveDia = () => `asf-dia-${D.cliente.id}-${D.hoy}`;
+const claveTragos = () => `asf-tragos-${D.cliente.id}-${D.hoy}`;
+const leerJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+const guardarJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const leerDia = () => leerJ(claveDia(), { items: {}, otros: [], faltan: null });
+const faltanPorHora = () => { const h = new Date().getHours(); return h < 11 ? 3 : h < 16 ? 2 : h < 21 ? 1 : 0; };
+const sinAcentos = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function vistaDia() {
+  return `<h2>Tu día en números</h2>
+    <div class="card" id="dia">
+      <div class="sub">Suma lo que comes durante el día y la app te dice cómo repartir lo que te queda. Sin culpa: los números solo sirven para ajustar.</div>
+      <div id="diaResumen" style="margin-top:12px"></div>
+      <div class="etq" style="margin-top:16px">¿Cuántas comidas te faltan hoy?</div>
+      <div class="chips" id="diaFaltan">${[0, 1, 2, 3].map((n) => `<button class="chip" data-faltan="${n}">${n}</button>`).join('')}</div>
+      <div class="resultado on" id="diaConsejo"></div>
+      <div class="etq" style="margin-top:18px">Agrega lo que comiste</div>
+      <input class="buscar" id="diaBuscar" placeholder="Busca: pollo, tortilla, tacos…" style="margin-top:8px">
+      <div class="chips" id="diaGrupos">${ALIMENTOS.map(([g], i) => `<button class="chip${i === 0 ? ' on' : ''}" data-grupo="${g}">${g}</button>`).join('')}</div>
+      <ul class="lista" id="diaLista" style="margin-top:8px">${ALIMENTOS.map(([g, l]) => l.map(([k, n, p, kcal, prot]) => `<li data-g="${g}" data-q="${esc(sinAcentos(n + ' ' + p))}" style="align-items:center"><span><b>${esc(n)}</b><br><span class="chico">${esc(p)} · ${kcal} kcal · ${prot} g prot</span></span>
+        <span style="display:flex;align-items:center;gap:8px;flex:none"><button class="chip" data-dmenos="${k}" style="padding:6px 12px">−</button><b data-dn="${k}" style="min-width:16px;text-align:center">0</b><button class="chip" data-dmas="${k}" style="padding:6px 12px">+</button></span></li>`).join('')).join('')}</ul>
+      <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">¿No está en la lista? Agrégalo con sus números</summary>
+        <div class="sub" style="margin-top:6px">Usa la etiqueta del producto o pregúntale a la IA de Nutrición cuántas calorías tiene.</div>
+        <input class="buscar" id="otroN" placeholder="Qué fue (ej. barra de proteína)" style="margin-top:8px">
+        <div class="fila" style="margin-top:8px"><input class="buscar" id="otroK" type="number" inputmode="numeric" placeholder="kcal"><input class="buscar" id="otroP" type="number" inputmode="numeric" placeholder="g proteína"></div>
+        <button class="btn borde" id="otroAdd">Agregar</button></details>
+      <div id="diaHoy"></div>
+      <div class="chico" style="margin-top:10px">Los valores son aproximados por porción casera. Las bebidas del contador de tragos se suman solas. Tu registro se guarda solo en este celular y empieza en cero cada día.</div>
+    </div>`;
 }
+
+function pintarDia() {
+  const el = document.getElementById('diaResumen'); if (!el) return;
+  const x = D.extra, r = leerDia(), t = leerJ(claveTragos(), {});
+  let kcal = 0, prot = 0;
+  const filas = [];
+  Object.entries(r.items).forEach(([k, q]) => { const a = ALIM[k]; if (!a || !q) return; kcal += a[3] * q; prot += a[4] * q; filas.push([`${q} × ${a[1]}`, a[3] * q, a[4] * q, k]); });
+  r.otros.forEach((o, i) => { kcal += o.kcal; prot += o.prot; filas.push([o.n, o.kcal, o.prot, 'otro:' + i]); });
+  const kAlc = BEBIDAS.reduce((s, [k, , , c]) => s + (t[k] || 0) * c, 0);
+  if (kAlc) { kcal += kAlc; filas.push(['Bebidas (contador de tragos)', kAlc, 0, '']); }
+  document.querySelectorAll('[data-dn]').forEach((b) => { b.textContent = r.items[b.dataset.dn] || 0; });
+  const faltan = r.faltan == null ? faltanPorHora() : r.faltan;
+  document.querySelectorAll('[data-faltan]').forEach((b) => b.classList.toggle('on', Number(b.dataset.faltan) === faltan));
+  const meta = Number(x.kcal) || 0, metaP = Number(x.proteina) || 0;
+  const barra = (v, m) => `<div style="height:8px;border-radius:6px;background:var(--tarjeta2);margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.min(100, m ? v / m * 100 : 0)}%;background:${m && v > m ? 'var(--ambar)' : 'var(--lima)'}"></div></div>`;
+  el.innerHTML = `<div class="fila">
+      <div class="mini"><span class="chico">Calorías${meta ? ` · te quedan` : ''}</span><b>${meta ? Math.max(0, meta - kcal).toLocaleString('es-MX') : kcal.toLocaleString('es-MX')}</b><span class="chico">${kcal.toLocaleString('es-MX')}${meta ? ' de ' + meta.toLocaleString('es-MX') : ''} kcal</span>${meta ? barra(kcal, meta) : ''}</div>
+      ${metaP ? `<div class="mini"><span class="chico">Proteína · te falta</span><b>${Math.max(0, metaP - prot)} g</b><span class="chico">${prot} de ${metaP} g</span>${barra(prot, metaP)}</div>` : `<div class="mini"><span class="chico">Proteína</span><b>${prot} g</b><span class="chico">llevas hoy</span></div>`}
+    </div>`;
+  document.getElementById('diaHoy').innerHTML = filas.length ? `<div class="etq" style="margin-top:16px">Lo que llevas hoy</div><ul class="lista" style="margin-top:4px">${filas.map(([n, k, p, id]) => `<li style="align-items:center"><span>${esc(n)}<br><span class="chico">${k} kcal · ${p} g prot</span></span>${id.startsWith('otro:') ? `<button class="chip" data-quitar="${id}" style="padding:6px 10px">Quitar</button>` : ''}</li>`).join('')}</ul>` : '';
+  document.getElementById('diaConsejo').innerHTML = consejoDia(meta, metaP, kcal, prot, faltan);
+}
+
+function consejoDia(meta, metaP, kcal, prot, faltan) {
+  if (!meta) return kcal ? `<p>Llevas ${kcal} kcal y ${prot} g de proteína. Cuando tengas tus números base, aquí verás cuánto te queda.</p>` : '<p>Agrega tu primera comida del día.</p>';
+  const resta = meta - kcal, faltaP = Math.max(0, metaP - prot);
+  if (!kcal) return `<h3>Día en cero</h3><p>Tienes ${meta.toLocaleString('es-MX')} kcal${metaP ? ` y ${metaP} g de proteína` : ''} para hoy. Empieza con proteína en tu primera comida.</p>`;
+  if (resta < 0) return `<h3>Te pasaste ${(-resta).toLocaleString('es-MX')} kcal</h3><p>No pasa nada: un día no cambia tu avance, lo que cuenta es el promedio de la semana.</p>
+    <ul><li>${faltan ? 'Lo que comas hoy, que sea proteína magra con verdura: pollo, atún, pescado o claras, sin tortilla, pan ni aceite extra.' : 'Por hoy ya cerraste. Toma agua y descansa.'}</li><li>Mañana retoma tu plan normal y haz tu sesión.</li><li>No compenses: nada de ayunos, de saltarte comidas ni de hacer cardio extra para "quemarlo".</li></ul>`;
+  if (!faltan) return `<h3>Cerraste el día ${resta <= meta * 0.1 ? 'en tu número 💪' : `con ${resta.toLocaleString('es-MX')} kcal de margen`}</h3><p>${metaP && faltaP > 20 ? `Te faltaron ${faltaP} g de proteína: si aún tienes hambre, un yogur griego o un licuado de proteína es la mejor opción.` : 'Excelente trabajo hoy.'}</p>`;
+  const kc = Math.round(resta / faltan);
+  // Una palma de proteína ≈ 200 kcal y 35 g. Máximo 2.5 palmas (~90 g) por comida: más no es realista.
+  const MAXP = 2.5, pcIdeal = faltaP / faltan;
+  let palmas = metaP ? Math.min(MAXP, Math.max(0.5, Math.round(pcIdeal / 35 * 2) / 2)) : 1;
+  const cabe = Math.floor(kc / 200 * 2) / 2;                 // palmas que caben en las calorías de la comida
+  const apretado = palmas > cabe;                            // la proteína que falta no cabe en las calorías
+  if (apretado) palmas = Math.max(0.5, cabe);
+  const puños = apretado ? 0 : Math.min(2, Math.max(0, Math.round((kc - palmas * 200 - 50) / 200 * 2) / 2));
+  const grasa = !apretado && kc - palmas * 200 - puños * 200 > 120;
+  const sobra = kc - palmas * 200 - puños * 200 - (grasa ? 100 : 0) - 50;
+  const num = (n) => (n >= 1 ? Math.floor(n) : '') + (n % 1 ? '½' : '');
+  const mano = (n, u, us) => `${num(n)} ${n <= 1 ? u : us}`;
+  const plato = apretado || kc < 250
+    ? `${mano(palmas, 'palma', 'palmas')} de proteína magra (atún, claras, pechuga o yogur griego; un licuado de proteína también sirve) con verdura libre. Sin tortilla, pan ni aceite extra.`
+    : `${mano(palmas, 'palma', 'palmas')} de proteína + verdura libre${puños ? ` + ${mano(puños, 'puño', 'puños')} de carbohidrato` : ''}${grasa ? ' + 1 pulgar de grasa' : ''}.`;
+  const notas = [];
+  if (metaP && pcIdeal > MAXP * 35 + 5) notas.push(`Te faltan ${faltaP} g de proteína: hoy ya no se alcanza toda sin forzarte. Llega a lo que puedas y mañana mete proteína desde el desayuno.`);
+  else if (apretado) notas.push('Con las calorías que te quedan, la proteína magra es la que más te rinde.');
+  if (sobra > 250) notas.push(`Aún te sobrarían ~${Math.round(sobra / 50) * 50} kcal: no tienes que comértelas. Quedarte abajo también está bien; si te da hambre, una fruta o un yogur griego.`);
+  if (resta < meta * 0.15 && faltan > 1) notas.push('Te queda poco margen: reparte con proteína magra y verdura para llegar sin hambre.');
+  return `<h3>${faltan === 1 ? 'En tu siguiente comida' : `En cada una de tus ${faltan} comidas`}: ~${kc.toLocaleString('es-MX')} kcal${metaP ? ` y ~${Math.round(Math.min(pcIdeal, palmas * 35))} g de proteína` : ''}</h3>
+    <p><b>Arma tu plato así:</b> ${plato}</p>${notas.map((n) => `<p>${n}</p>`).join('')}`;
+}
+
+function conectarDia() {
+  const box = document.getElementById('dia'); if (!box) return;
+  const gruposVis = () => {
+    const q = sinAcentos(document.getElementById('diaBuscar').value.trim());
+    const g = (document.querySelector('#diaGrupos .on') || {}).dataset;
+    document.querySelectorAll('#diaLista li').forEach((li) => { li.style.display = q ? (li.dataset.q.includes(q) ? '' : 'none') : (g && li.dataset.g === g.grupo ? '' : 'none'); });
+  };
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const r = leerDia();
+    if (b.dataset.grupo) { document.querySelectorAll('#diaGrupos .chip').forEach((c) => c.classList.toggle('on', c === b)); document.getElementById('diaBuscar').value = ''; gruposVis(); return; }
+    if (b.dataset.faltan) r.faltan = Number(b.dataset.faltan);
+    else if (b.dataset.dmas || b.dataset.dmenos) { const k = b.dataset.dmas || b.dataset.dmenos; r.items[k] = Math.max(0, (r.items[k] || 0) + (b.dataset.dmas ? 1 : -1)); }
+    else if (b.dataset.quitar) r.otros.splice(Number(b.dataset.quitar.split(':')[1]), 1);
+    else if (b.id === 'otroAdd') {
+      const k = Number(document.getElementById('otroK').value), p = Number(document.getElementById('otroP').value) || 0;
+      if (!k) return;
+      r.otros.push({ n: document.getElementById('otroN').value.trim() || 'Otro alimento', kcal: Math.round(k), prot: Math.round(p) });
+      ['otroN', 'otroK', 'otroP'].forEach((id) => { document.getElementById(id).value = ''; });
+    } else return;
+    guardarJ(claveDia(), r);
+    pintarDia();
+  });
+  document.getElementById('diaBuscar').addEventListener('input', gruposVis);
+  gruposVis();
+  pintarDia();
+}
+
 const tragos = {};
 function pintarAlcohol() {
   const el = document.getElementById('totalAlcohol'); if (!el) return;
@@ -668,17 +825,14 @@ function conectar() {
     const b = e.target.closest('[data-mas],[data-menos]'); if (!b) return;
     const k = b.dataset.mas || b.dataset.menos;
     tragos[k] = Math.max(0, (tragos[k] || 0) + (b.dataset.mas ? 1 : -1));
+    guardarJ(claveTragos(), tragos);
     pintarAlcohol();
+    pintarDia();
   });
+  Object.keys(tragos).forEach((k) => delete tragos[k]);
+  Object.assign(tragos, leerJ(claveTragos(), {}));
   pintarAlcohol();
-  document.getElementById('registro').addEventListener('click', (e) => {
-    const b = e.target.closest('.chip'), g = b && b.closest('[data-comida]'); if (!g) return;
-    const r = leerComida(), k = g.dataset.comida;
-    r[k] = r[k] === b.dataset.v ? undefined : b.dataset.v;
-    try { localStorage.setItem(claveComida(), JSON.stringify(r)); } catch (err) {}
-    pintarComida();
-  });
-  pintarComida();
+  conectarDia();
   const bus = document.getElementById('buscar');
   bus.addEventListener('input', () => {
     const q = bus.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
