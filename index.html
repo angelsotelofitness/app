@@ -265,6 +265,7 @@ function pintar() {
     `<div class="pie">Beta · Método de Integración Híbrida<br>Datos de tu app al ${D.leido ? fechaCorta(D.leido) : '—'}${D.demo ? ' · DATOS DE PRUEBA' : ''}</div>`;
   activar(tabActual);
   conectar();
+  sincronizar();
 }
 
 // ---------- HOY ----------
@@ -329,7 +330,7 @@ function vistaHoy(c) {
   const p = proximaSesion(c);
   const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)} · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
     : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
-  return `<section data-v="hoy">${hero}${sem}${manana}
+  return `<section data-v="hoy">${hero}<div id="correrAviso"></div>${sem}${manana}
     <h2>¿Se complicó tu día?</h2>
     <div class="card" id="arbol" data-sesion="${esc(sesionTxt)}" data-equipo="${equipoBase}">
       <div class="sub">El plan cambia el equipo y el tiempo, nunca la sesión. Responde dos preguntas:</div>
@@ -453,6 +454,7 @@ function vistaAvance(c) {
     <div class="semanas">${barras}</div></div>
     <h2>Peso</h2><div class="card">${peso}</div>
     <h2>Running</h2><div class="card">${run}</div>
+    <div id="correrBox"></div>
     <h2>Últimas sesiones</h2>
     <div class="card"><ul class="lista">${hechas.map((s) => `<li><span>${esc(s.tipo === 'Cardio' ? s.t : sesionDe(s.t).nombre)}</span><span class="ok">${fechaCorta(s.f)} ✓</span></li>`).join('') || '<li class="no">Aún no hay sesiones.</li>'}</ul></div>
   </section>`;
@@ -477,6 +479,7 @@ function vistaComida() {
     <div class="card hero"><div class="etq">Tus números</div><div style="margin-top:10px">${nums}</div>
       <div class="sub" style="margin-top:10px">Lo más importante es la cantidad: llegar a tu proteína y no pasarte de tus calorías. Se evalúa el promedio de la semana, nunca un solo día.</div>
       <a class="btn lima" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición ASF</a></div>
+    <div id="menuBox"></div>
     ${reparto}${importante}
     <div class="card"><div class="etq">Registra tu día</div><div class="sub" style="margin-top:6px">Marca tus comidas y tus tragos en la pestaña <b style="color:var(--texto)">Mi día</b>: la app te dice cuánto te queda y cómo ajustar el resto del día.</div><button class="btn borde" data-ir="dia">Ir a Mi día</button></div>
     <h2>Cómo usar la IA de Nutrición</h2>
@@ -572,7 +575,8 @@ function vistaAlcohol() {
 // ---------- TU DÍA EN NÚMEROS (beta, 9 nov 2026) ----------
 // Contador de calorías y proteína del día: el cliente suma lo que come y la app le dice cómo repartir
 // lo que le queda en sus siguientes comidas. Valores aproximados por porción casera (tabla de abajo).
-// Se guarda solo en el celular (localStorage), por día; nunca llega a las hojas.
+// Se guarda en el celular (localStorage) y, desde el 15 nov 2026, también en la hoja "Registro de comidas ASF"
+// por la puerta de Apps Script (App.gs), para que Angel lo vea y quede el historial.
 // Regla de ASF: si se pasa, no se compensa ni se ayuna; se cierra el día con proteína y verdura y mañana plan normal.
 const ALIMENTOS = [
   ['Proteína', [
@@ -624,10 +628,11 @@ const ALIMENTOS = [
   ]],
 ];
 const ALIM = {}; ALIMENTOS.forEach(([, l]) => l.forEach((a) => { ALIM[a[0]] = a; }));
-const claveDia = () => `asf-dia2-${D.cliente.id}-${D.hoy}`;
-const claveTragos = () => `asf-tragos-${D.cliente.id}-${D.hoy}`;
+const claveDia = (f = D.hoy) => `asf-dia2-${D.cliente.id}-${f}`;
+const claveTragos = (f = D.hoy) => `asf-tragos-${D.cliente.id}-${f}`;
 const leerJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
-const guardarJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+// Cada cambio al día o a los tragos se sube a la nube (ver "Registro en la nube").
+const guardarJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} if (/^asf-(dia2|tragos)-/.test(k)) marcarCambio(k.slice(-10)); };
 const sinAcentos = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 // Pestaña "Mi día" (9 nov 2026, pedido de Angel): solo el registro del día.
 // Cada comida se marca "Del plan" (cuenta lo de su plan) o "Fuera del plan" (se detalla qué comió).
@@ -666,7 +671,9 @@ function vistaMiDia() {
       <ul class="lista" style="margin-top:6px">${BEBIDAS.map(([k, n, d, kcal]) => `<li style="align-items:center"><span><b>${esc(n)}</b><br><span class="chico">${esc(d)} · ${kcal} kcal</span></span>
         <span style="display:flex;align-items:center;gap:8px;flex:none"><button class="chip" data-menos="${k}" style="padding:6px 12px">−</button><b data-n="${k}" style="min-width:16px;text-align:center">0</b><button class="chip" data-mas="${k}" style="padding:6px 12px">+</button></span></li>`).join('')}</ul>
       <div class="resultado on" id="totalAlcohol"></div></div>
-    <div class="chico" style="margin:4px 4px 0">Los valores son aproximados por porción casera. Tu registro se guarda solo en este celular y empieza en cero cada día.</div>
+    <h2>Tus últimos 7 días</h2>
+    <div class="card" id="historial"></div>
+    <div class="chico" style="margin:4px 4px 0">Los valores son aproximados por porción casera. <span id="nubeEstado">Tu registro se guarda en este celular.</span> Cada día empieza en cero.</div>
   </section>`;
 }
 
@@ -675,7 +682,8 @@ function htmlComida(nombre, c) {
   const conMeta = Number(D.extra.kcal) > 0;
   const chips = `<div class="chips" style="margin-top:8px">
       ${conMeta || nombre !== 'Colación' ? `<button class="chip${est === 'plan' ? ' on' : ''}" data-estado="plan" data-c="${nombre}">Del plan</button>` : ''}
-      <button class="chip${est === 'fuera' ? ' on' : ''}" data-estado="fuera" data-c="${nombre}">${nombre === 'Colación' ? 'Registrar' : 'Fuera del plan'}</button></div>`;
+      <button class="chip${est === 'fuera' ? ' on' : ''}" data-estado="fuera" data-c="${nombre}">${nombre === 'Colación' ? 'Registrar' : 'Fuera del plan'}</button>
+      ${hayNube() ? `<button class="chip" data-foto="${nombre}">📷 Foto</button>` : ''}</div>${htmlFoto(nombre)}`;
   let detalle = '';
   if (est === 'fuera') {
     const lineas = [];
@@ -733,6 +741,7 @@ function pintarDia() {
       ${metaP ? `<div class="mini"><span class="chico">Proteína · te falta</span><b>${Math.max(0, metaP - prot)} g</b><span class="chico">${prot} de ${metaP} g</span>${barra(prot, metaP)}</div>` : `<div class="mini"><span class="chico">Proteína</span><b>${prot} g</b><span class="chico">llevas hoy</span></div>`}
     </div>`;
   document.getElementById('diaConsejo').innerHTML = consejoDia(meta, metaP, kcal, prot, faltan);
+  pintarHistorial();
 }
 
 function consejoDia(meta, metaP, kcal, prot, faltan) {
@@ -769,7 +778,8 @@ function conectarDia() {
   const box = document.getElementById('diaComidas'); if (!box) return;
   box.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    const n = b.dataset.c || b.dataset.editar || b.dataset.listo || b.dataset.otro;
+    const n = b.dataset.c || b.dataset.editar || b.dataset.listo || b.dataset.otro || b.dataset.foto || b.dataset.fotoagregar || b.dataset.fotocerrar;
+    if (b.dataset.foto) return pedirFoto(n);
     const d = leerDia(); const c = d.c[n] = d.c[n] || {};
     let todo = true; // volver a pintar las tarjetas
     if (b.dataset.estado) {
@@ -794,7 +804,12 @@ function conectarDia() {
       if (!k) return;
       c.otros = c.otros || []; c.otros.push({ n: q('n').value.trim() || 'Otro alimento', kcal: Math.round(k), prot: Math.round(p) });
       ['n', 'k', 'p'].forEach((s) => { q(s).value = ''; });
-    } else return;
+    } else if (b.dataset.fotoagregar) {
+      const r = fotoRes[n]; if (!r || !r.ok || r.agregado) return;
+      c.estado = 'fuera'; c.otros = c.otros || []; c.otros.push({ n: r.platillo, kcal: Math.round(r.kcal), prot: Math.round(r.proteina) });
+      r.agregado = true;
+    } else if (b.dataset.fotocerrar) delete fotoRes[n];
+    else return;
     guardarJ(claveDia(), d);
     if (todo) pintarComidas();
     else { const t = totalComida(c, n), s = box.querySelector(`[data-comida="${n}"] .ok`); if (s) s.textContent = `${t.kcal.toLocaleString('es-MX')} kcal · ${t.prot} g`; }
@@ -814,6 +829,456 @@ function pintarAlcohol() {
   const consejo = n > 2 ? 'Superaste los 2 tragos: a partir de aquí, solo agua mineral. Mañana retomas tu plan normal.'
     : malos ? 'Para la siguiente, mejor un destilado con agua mineral.' : n === 2 ? 'Llegaste a tu máximo: a partir de aquí, agua mineral.' : 'Vas bien. Toma un vaso de agua antes de la siguiente.';
   el.innerHTML = `<h3>${kcal} kcal</h3><p>${n} ${n === 1 ? 'bebida' : 'bebidas'} · ${esc(consejo)}</p><p class="chico">Al cerrar el día, resta esas ${kcal} kcal de tus carbohidratos o grasas, nunca de tu proteína.</p>`;
+}
+
+// ---------- REGISTRO EN LA NUBE, FOTO DEL PLATO Y MENÚ (15 nov 2026) ----------
+// Solo en la app publicada: D.nube (la dirección de la puerta) viene dentro de los datos cifrados del cliente.
+// El celular entra con token = SHA-256(código:CLAVE); la puerta solo conoce la huella de ese token (App.gs).
+// Si no hay internet, todo sigue en el celular y se sube después (lista de pendientes).
+let TOKEN = null, NUBE_OK = false, NUBE_PREFS = null, NUBE_MENU = null, menuEstado = null, editandoPrefs = false, timerNube = null;
+const fotoRes = {};
+// Foto, menú y subida aparecen solo cuando la puerta ya contestó bien (si App.gs no está publicado, la app se ve como antes).
+const hayNube = () => !!(D && D.nube && TOKEN && NUBE_OK);
+const claveT = (f) => `asf-t-${D.cliente.id}-${f}`;
+const clavePend = () => `asf-pend-${D.cliente.id}`;
+const claveMenu = () => `asf-menu-${D.cliente.id}`;
+
+async function prepararNube() {
+  if (LOCAL || !D.nube || TOKEN) return;
+  const codigo = lee('asf-codigo'), clave = lee('asf-clave-' + codigo);
+  if (!codigo || !clave) return;
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codigo + ':' + clave.toUpperCase()));
+  TOKEN = Array.from(new Uint8Array(h)).map((x) => x.toString(16).padStart(2, '0')).join('');
+  const m = leerJ(claveMenu(), {}); NUBE_PREFS = m.prefs || null; NUBE_MENU = m.menu || null;
+}
+
+async function nube(accion, cuerpo) {
+  // text/plain para que el navegador no pida permiso previo (CORS) a Apps Script.
+  const r = await fetch(D.nube, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion, token: TOKEN, ...cuerpo }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error === 'acceso inválido' ? 'Tu acceso no está activo. Avísale a Angel.' : (j.error || 'Sin conexión'));
+  return j;
+}
+
+function estadoNube(ok) {
+  const el = document.getElementById('nubeEstado'); if (!el) return;
+  el.textContent = ok ? 'Tu registro queda guardado en tu cuenta ✓' : 'Sin conexión: se guarda en tu cuenta cuando vuelvas a tener internet.';
+}
+
+// Números de un día cualquiera (para subirlo y para el historial).
+function resumenDia(f) {
+  const c = leerJ(claveDia(f), {}).c || {}, t = leerJ(claveTragos(f), {});
+  let kcal = 0, prot = 0, delPlan = 0, fuera = 0, tr = 0;
+  COMIDAS.forEach((n) => { const x = c[n]; if (!x || !x.estado) return; const v = totalComida(x, n); kcal += v.kcal; prot += v.prot; if (x.estado === 'plan') delPlan++; else fuera++; });
+  BEBIDAS.forEach(([k, , , cal]) => { kcal += (t[k] || 0) * cal; if (k !== 'mezclador') tr += t[k] || 0; });
+  return { kcal, prot, delPlan, fuera, tragos: tr, metaKcal: Number(D.extra.kcal) || 0, metaProt: Number(D.extra.proteina) || 0, hay: delPlan + fuera + tr > 0 };
+}
+
+function marcarCambio(f) {
+  if (!D || !D.cliente) return;
+  guarda(claveT(f), String(Date.now()));
+  const p = leerJ(clavePend(), []);
+  if (!p.includes(f)) { p.push(f); try { localStorage.setItem(clavePend(), JSON.stringify(p)); } catch (e) {} }
+  clearTimeout(timerNube); timerNube = setTimeout(subirPendientes, 1500);
+}
+
+async function subirPendientes() {
+  if (!hayNube()) return;
+  for (const f of leerJ(clavePend(), [])) {
+    const t = lee(claveT(f));
+    try {
+      await nube('app_guardar', { fecha: f, dia: leerJ(claveDia(f), {}), tragos: leerJ(claveTragos(f), {}), resumen: resumenDia(f), actualizado: Number(t) || Date.now() });
+      if (lee(claveT(f)) === t) { try { localStorage.setItem(clavePend(), JSON.stringify(leerJ(clavePend(), []).filter((x) => x !== f))); } catch (e) {} }
+      estadoNube(true);
+    } catch (e) { estadoNube(false); return; }
+  }
+}
+
+// Al abrir: baja lo de la nube (si es más nuevo que lo del celular), sus gustos y su último menú, y sube lo pendiente.
+async function sincronizar() {
+  await prepararNube();
+  if (!D.nube || !TOKEN) return;
+  try {
+    const r = await nube('app_leer', {});
+    NUBE_OK = true;
+    const enNube = new Set();
+    let cambioHoy = false;
+    (r.dias || []).forEach((x) => {
+      enNube.add(x.fecha);
+      if (x.actualizado > (Number(lee(claveT(x.fecha))) || 0)) {
+        try { localStorage.setItem(claveDia(x.fecha), JSON.stringify(x.dia || {})); localStorage.setItem(claveTragos(x.fecha), JSON.stringify(x.tragos || {})); } catch (e) {}
+        guarda(claveT(x.fecha), String(x.actualizado));
+        if (x.fecha === D.hoy) cambioHoy = true;
+      }
+    });
+    // Lo que se registró antes de que existiera la nube: se sube una vez.
+    for (let i = 0; i < 7; i++) { const f = mas(D.hoy, -i); if (!enNube.has(f) && !lee(claveT(f)) && resumenDia(f).hay) marcarCambio(f); }
+    NUBE_PREFS = r.preferencias || null; NUBE_MENU = r.menu || null;
+    if (r.correr && (Number(r.correr.t) || 0) > (Number(leerCorrer().t) || 0)) {
+      try { localStorage.setItem(claveCorrer(), JSON.stringify({ carrera: r.correr.carrera || null, pruebas: r.correr.pruebas || [], t: r.correr.t })); } catch (e) {}
+      pintarCorrer();
+    }
+    guardarJ(claveMenu(), { prefs: NUBE_PREFS, menu: NUBE_MENU });
+    if (cambioHoy) { Object.keys(tragos).forEach((k) => delete tragos[k]); Object.assign(tragos, leerJ(claveTragos(), {})); pintarAlcohol(); }
+    pintarComidas(); pintarDia(); pintarMenu();
+    estadoNube(true);
+    subirPendientes();
+    subirCorrer();
+  } catch (e) { if (NUBE_OK) estadoNube(false); }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && D && D.cliente) subirPendientes(); });
+
+// ---------- Historial: últimos 7 días contra sus números ----------
+function pintarHistorial() {
+  const el = document.getElementById('historial'); if (!el) return;
+  const dias = [];
+  for (let i = 0; i < 7; i++) { const f = mas(D.hoy, -i); dias.push([f, resumenDia(f)]); }
+  const con = dias.filter(([, r]) => r.hay);
+  if (!con.length) { el.innerHTML = '<div class="sub">Aquí verás tus días registrados y tu promedio de la semana.</div>'; return; }
+  const meta = Number(D.extra.kcal) || 0, metaP = Number(D.extra.proteina) || 0;
+  const prom = (k) => Math.round(con.reduce((s, [, r]) => s + r[k], 0) / con.length);
+  const pk = prom('kcal'), pp = prom('prot');
+  const nombreDia = (f, i) => i === 0 ? 'Hoy' : i === 1 ? 'Ayer' : new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' });
+  const filas = dias.map(([f, r], i) => {
+    if (!r.hay) return `<li><span>${esc(nombreDia(f, i))}</span><span class="chico">Sin registro</span></li>`;
+    const pasado = meta && r.kcal > meta * 1.05;
+    return `<li><span><b>${esc(nombreDia(f, i))}</b><br><span class="chico">${r.delPlan} del plan · ${r.fuera} fuera${r.tragos ? ` · ${r.tragos} ${r.tragos === 1 ? 'trago' : 'tragos'}` : ''}</span></span>
+      <span class="${pasado ? 'chico' : 'ok'}" style="text-align:right">${r.kcal.toLocaleString('es-MX')} kcal<br><span class="chico">${r.prot} g prot</span></span></li>`;
+  }).join('');
+  const veredicto = !meta ? '' : pk <= meta * 1.05 ? 'Vas dentro de tu número 💪' : `Vas ${(pk - meta).toLocaleString('es-MX')} kcal arriba en promedio: ajusta una comida al día.`;
+  el.innerHTML = `<div class="fila">
+      <div class="mini"><span class="chico">Promedio · ${con.length} ${con.length === 1 ? 'día' : 'días'}</span><b>${pk.toLocaleString('es-MX')}</b><span class="chico">kcal${meta ? ' de ' + meta.toLocaleString('es-MX') : ''}</span></div>
+      <div class="mini"><span class="chico">Proteína promedio</span><b>${pp} g</b><span class="chico">${metaP ? 'de ' + metaP + ' g' : 'al día'}</span></div></div>
+    ${veredicto ? `<div class="sub" style="margin-top:8px">${veredicto}</div>` : ''}
+    <ul class="lista" style="margin-top:8px">${filas}</ul>
+    <div class="chico">Cuenta el promedio de la semana, nunca un solo día. Los días sin registro no entran al promedio.</div>`;
+}
+
+// ---------- Foto del plato: Haiku 5.5 estima y dice cuánto comer ----------
+function htmlFoto(nombre) {
+  const r = fotoRes[nombre]; if (!r) return '';
+  if (r.cargando) return '<div class="resultado on" style="margin-top:10px"><p>Leyendo tu plato…</p></div>';
+  const cerrar = `<button class="chip" data-fotocerrar="${nombre}" style="margin-top:8px">Cerrar</button>`;
+  if (r.error) return `<div class="resultado on" style="margin-top:10px"><p>${esc(r.error)}</p>${cerrar}</div>`;
+  return `<div class="resultado on" style="margin-top:10px"><h3>${esc(r.platillo)}</h3>
+    <p><b>Cómete:</b> ${esc(r.comete)}</p><p><b>Aprox.:</b> ${esc(r.aprox)}</p><p><b>Tip:</b> ${esc(r.tip)}</p>
+    <p class="chico">Lo que se calcula de una foto es aproximado.</p>
+    ${r.ok && !r.agregado ? `<button class="btn lima" data-fotoagregar="${nombre}">Agregar a mi ${nombre.toLowerCase()} · ${r.kcal} kcal · ${r.proteina} g</button>` : r.agregado ? '<p class="ok">Agregado ✓</p>' : ''}${cerrar}</div>`;
+}
+
+function achicarFoto(archivo) {
+  return new Promise((ok, mal) => {
+    const url = URL.createObjectURL(archivo), im = new Image();
+    im.onload = () => {
+      const s = Math.min(1, 1024 / Math.max(im.width, im.height)), cv = document.createElement('canvas');
+      cv.width = Math.round(im.width * s); cv.height = Math.round(im.height * s);
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      ok(cv.toDataURL('image/jpeg', 0.75).split(',')[1]);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No pude abrir la foto. Intenta con otra.')); };
+    im.src = url;
+  });
+}
+
+function pedirFoto(nombre) {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = 'image/*';
+  i.onchange = async () => {
+    const archivo = i.files && i.files[0]; if (!archivo) return;
+    fotoRes[nombre] = { cargando: true }; pintarComidas();
+    try {
+      const r = resumenDia(D.hoy), c = leerDia().c;
+      const faltan = Math.max(1, PRINCIPALES.filter((x) => !c[x] || !c[x].estado).length);
+      const contexto = { faltan, meta: r.metaKcal ? `${r.metaKcal} kcal${r.metaProt ? ` y ${r.metaProt} g de proteína` : ''}` : '',
+        restaKcal: r.metaKcal ? Math.max(0, r.metaKcal - r.kcal) : '', faltaProt: r.metaProt ? Math.max(0, r.metaProt - r.prot) : '' };
+      const res = await nube('app_foto', { imagen: await achicarFoto(archivo), comida: nombre, contexto });
+      fotoRes[nombre] = { ...res.resultado, ok: !!res.resultado.es_comida };
+    } catch (e) { fotoRes[nombre] = { error: e.message }; }
+    pintarComidas();
+  };
+  i.click();
+}
+
+// ---------- Menú con sus números y sus gustos (como el GPT de Nutrición, dentro de la app) ----------
+const COCINA = ['Sartén', 'Horno', 'Microondas', 'Freidora de aire'];
+function pintarMenu() {
+  const el = document.getElementById('menuBox'); if (!el) return;
+  if (!hayNube()) { el.innerHTML = ''; return; }
+  if (!NUBE_PREFS || editandoPrefs) {
+    const p = NUBE_PREFS || {}, nCom = Number(p.comidas) || (D.extra.comidas || []).length || 3, coc = String(p.cocina || 'Sartén');
+    const campo = 'width:100%;margin-top:6px;padding:12px;border-radius:12px;border:1px solid var(--linea);background:var(--fondo,#0B0D0A);color:var(--texto);font:500 14px Poppins,sans-serif;box-sizing:border-box';
+    el.innerHTML = `<h2>Tu menú</h2><div class="card"><div class="etq">Cuéntame qué te gusta</div>
+      <div class="sub" style="margin-top:6px">Lo contestas una vez y la app arma tu menú con tus números.</div>
+      <div class="chico" style="margin-top:12px">Qué te gusta comer</div><textarea id="pfGusta" rows="2" style="${campo}" placeholder="Ej. pollo, huevo, arroz, tacos, fruta">${esc(p.gusta || '')}</textarea>
+      <div class="chico" style="margin-top:10px">Qué no comes o te cae mal (alergias)</div><textarea id="pfNo" rows="2" style="${campo}" placeholder="Ej. no como pescado; intolerante a la lactosa">${esc(p.noCome || '')}</textarea>
+      <div class="chico" style="margin-top:10px">Comidas al día</div><div class="chips" id="pfComidas" style="margin-top:6px">${[2, 3, 4, 5].map((n) => `<button class="chip${n === nCom ? ' on' : ''}" data-pfc="${n}">${n}</button>`).join('')}</div>
+      <div class="chico" style="margin-top:10px">Con qué cocinas</div><div class="chips" id="pfCocina" style="margin-top:6px">${COCINA.map((x) => `<button class="chip${coc.includes(x) ? ' on' : ''}" data-pfk="${x}">${x}</button>`).join('')}</div>
+      <button class="btn lima" data-pfguardar="1">${NUBE_MENU ? 'Guardar' : 'Guardar y armar mi menú'}</button></div>`;
+    return;
+  }
+  const m = NUBE_MENU && NUBE_MENU.menu;
+  const error = menuEstado && menuEstado.startsWith('error:') ? `<div class="chico" style="color:#ff7a7a;margin-top:8px">${esc(menuEstado.slice(6))}</div>` : '';
+  const botones = menuEstado === 'armando'
+    ? '<div class="resultado on" style="margin-top:10px"><p>Armando tu menú con tus números… tarda como 30 segundos.</p></div>'
+    : `${error}<button class="btn ${m ? 'borde' : 'lima'}" data-menunuevo="1">${m ? 'Armar otro menú' : 'Armar mi menú'}</button>
+       <button class="chip" data-pfeditar="1" style="margin-top:8px">Cambiar mis gustos</button>`;
+  if (!m) { el.innerHTML = `<h2>Tu menú</h2><div class="card"><div class="sub">Con tus números y tus gustos, la app arma 2 días de menú para alternar, con lista del súper y meal prep.</div>${botones}</div>`; return; }
+  const lista = (l, tag) => `<${tag} class="${tag === 'ol' ? 'pasos' : 'lista'}" style="margin-top:6px">${(l || []).map((x) => `<li><span>${esc(x)}</span></li>`).join('')}</${tag}>`;
+  el.innerHTML = `<h2>Tu menú</h2><div class="card hero"><div class="etq">Armado con tus números${NUBE_MENU.fecha ? ' · ' + esc(fechaCorta(NUBE_MENU.fecha)) : ''}</div>
+    ${(m.dias || []).map((d) => `<h3 style="margin:14px 0 2px">${esc(d.nombre)} <span class="chico">· ${Number(d.kcal).toLocaleString('es-MX')} kcal · ${esc(d.proteina)} g</span></h3>
+      <ul class="lista">${(d.comidas || []).map((c) => `<li><span><b>${esc(c.comida)}</b> · ${esc(c.platillo)}<br><span class="chico">${(c.ingredientes || []).map((x) => esc(x.cantidad + ' ' + x.alimento)).join(' · ')}</span></span><span class="chico" style="text-align:right;flex:none">${esc(c.kcal)} kcal<br>${esc(c.proteina)} g</span></li>`).join('')}</ul>`).join('')}
+    <details style="margin-top:10px"><summary class="sub" style="cursor:pointer">Lista del súper</summary>${lista(m.lista_super, 'ul')}</details>
+    <details style="margin-top:6px"><summary class="sub" style="cursor:pointer">Meal prep (unas 2 horas a la semana)</summary>${lista(m.meal_prep, 'ol')}</details>
+    <details style="margin-top:6px"><summary class="sub" style="cursor:pointer">Cómo guardarlo</summary>${lista(m.guardar, 'ul')}</details>
+    ${botones}</div>`;
+}
+
+async function armarMenu() {
+  menuEstado = 'armando'; pintarMenu();
+  try { const r = await nube('app_menu', { kcal: D.extra.kcal, proteina: D.extra.proteina }); NUBE_MENU = r.menu; menuEstado = null; guardarJ(claveMenu(), { prefs: NUBE_PREFS, menu: NUBE_MENU }); }
+  catch (e) { menuEstado = 'error:' + e.message; }
+  pintarMenu();
+}
+
+function conectarMenu() {
+  const box = document.getElementById('menuBox'); if (!box) return;
+  box.addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.pfc) { box.querySelectorAll('[data-pfc]').forEach((x) => x.classList.toggle('on', x === b)); return; }
+    if (b.dataset.pfk) { b.classList.toggle('on'); return; }
+    if (b.dataset.pfeditar) { editandoPrefs = true; menuEstado = null; return pintarMenu(); }
+    if (b.dataset.menunuevo) return armarMenu();
+    if (b.dataset.pfguardar) {
+      if (menuEstado === 'guardando') return;
+      const preferencias = {
+        gusta: box.querySelector('#pfGusta').value.trim(), noCome: box.querySelector('#pfNo').value.trim(),
+        comidas: Number((box.querySelector('[data-pfc].on') || {}).dataset?.pfc) || 3,
+        cocina: Array.from(box.querySelectorAll('[data-pfk].on')).map((x) => x.dataset.pfk).join(', ') || 'Sartén',
+      };
+      // Los errores se muestran sin volver a pintar, para no borrar lo que escribió.
+      const aviso = (t) => { let a = box.querySelector('#pfError'); if (!a) { a = document.createElement('div'); a.id = 'pfError'; a.className = 'chico'; a.style.cssText = 'color:#ff7a7a;margin-top:8px'; b.before(a); } a.textContent = t; };
+      if (!preferencias.gusta) return aviso('Escribe al menos qué te gusta comer.');
+      menuEstado = 'guardando'; const antes = b.textContent; b.textContent = 'Guardando…';
+      try {
+        const r = await nube('app_preferencias', { preferencias });
+        NUBE_PREFS = r.preferencias; editandoPrefs = false; menuEstado = null;
+        guardarJ(claveMenu(), { prefs: NUBE_PREFS, menu: NUBE_MENU });
+        if (!NUBE_MENU) return armarMenu();
+        pintarMenu();
+      } catch (err) { menuEstado = null; b.textContent = antes; aviso(err.message); }
+    }
+  });
+  pintarMenu();
+}
+
+// ---------- CARRERA FINAL Y PRUEBA DE 5 KM (15 nov 2026, pedido de Angel) ----------
+// Semana 1: prueba de 5 km = su tiempo de referencia. Si no llega a 5 km, registra lo más que corrió y su primera meta es completarlos (método CACO).
+// Con su primer 5 km completo, la app calcula su meta de tiempo para el fin del programa.
+// Se repite al final de cada fase (semanas 4, 8 y 12), como dice producto/rutinas/metodo-v2.md, sección 5.
+// Carrera final: si no la ha registrado, el aviso sale siempre en Hoy. Si no encuentra evento en su ciudad,
+// se agenda sola el domingo del fin de semana antes de que termine el programa. Botones para su calendario (Google o .ics).
+// Se guarda en el celular y en la hoja "Registro de comidas ASF", pestaña Carreras (App.gs).
+const claveCorrer = () => `asf-correr-${D.cliente.id}`;
+const leerCorrer = () => { const x = leerJ(claveCorrer(), {}); x.pruebas = x.pruebas || []; return x; };
+let correrForm = null; // 'prueba' | 'carrera' | null
+const tiempoTxt = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const a5 = (q) => q.seg * 5 / q.km; // tiempo llevado a 5 km exactos
+const finPrograma = () => mas(D.cliente.inicio, D.cliente.duracion);
+const fechaLarga = (f) => { const d = new Date(f + 'T12:00'); return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`; };
+function fechaCarreraSugerida() {
+  let f = mas(finPrograma(), -3);
+  while (new Date(f + 'T12:00').getDay() !== 0) f = mas(f, -1);
+  return f <= D.hoy ? mas(D.hoy, 7) : f;
+}
+
+// Meta de tiempo: mejora típica de quien empieza a correr con constancia 1-2 veces por semana,
+// mayor entre más lento empieza, proporcional a las semanas que le quedan (12 semanas = mejora completa).
+function metasCorrer(x) {
+  const p = x.pruebas.slice().sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  const de5 = p.filter((q) => q.km >= 5);
+  const primer5 = de5[0] || null;
+  const mejor5 = de5.reduce((m, q) => (!m || a5(q) < a5(m) ? q : m), null);
+  const maxKm = p.reduce((m, q) => Math.max(m, q.km), 0);
+  let metaSeg = null, pct = null;
+  if (primer5) {
+    const base = a5(primer5), ritmo = base / 5;
+    const semanas = Math.max(0, (new Date(finPrograma() + 'T12:00') - new Date(primer5.fecha + 'T12:00')) / 6048e5);
+    pct = (ritmo > 480 ? 0.15 : ritmo > 390 ? 0.10 : 0.06) * Math.min(1, semanas / 12);
+    metaSeg = Math.round(base * (1 - pct) / 5) * 5;
+  }
+  return { p, inicial: p[0] || null, primer5, mejor5, maxKm, metaSeg, pct };
+}
+
+function guardarCorrer(x) {
+  x.t = Date.now();
+  try { localStorage.setItem(claveCorrer(), JSON.stringify(x)); } catch (e) {}
+  guarda(claveCorrer() + '-pend', '1');
+  correrForm = null;
+  pintarCorrer();
+  subirCorrer();
+}
+async function subirCorrer() {
+  if (!hayNube() || !lee(claveCorrer() + '-pend')) return;
+  const x = leerCorrer(), m = metasCorrer(x), t = x.t;
+  try {
+    await nube('app_correr', { correr: x, resumen: {
+      inicial: m.inicial ? tiempoTxt(m.inicial.seg) + (m.inicial.km < 5 ? ` en ${m.inicial.km} km` : '') : '',
+      mejor: m.mejor5 ? tiempoTxt(a5(m.mejor5)) : '', meta: m.metaSeg ? tiempoTxt(m.metaSeg) : '' } });
+    if (leerCorrer().t === t) guarda(claveCorrer() + '-pend', null);
+  } catch (e) {}
+}
+
+function linksCalendario(k) {
+  const d = k.fecha.replace(/-/g, ''), d2 = mas(k.fecha, 1).replace(/-/g, '');
+  const titulo = `🏃 ${k.nombre} (${k.distancia})`;
+  const det = `Mi carrera final del programa ASF Training.${k.ciudad ? ' ' + k.ciudad + '.' : ''} Llega con tu sesión de la semana cumplida y duerme bien la noche anterior.`;
+  const g = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${d}/${d2}&details=${encodeURIComponent(det)}${k.ciudad ? '&location=' + encodeURIComponent(k.ciudad) : ''}`;
+  const e = (s) => s.replace(/([,;\\])/g, '\\$1');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ASF Training//App//ES', 'BEGIN:VEVENT', `UID:carrera-${D.cliente.id}-${d}@asftraining`,
+    'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', 'DTSTART;VALUE=DATE:' + d, 'DTEND;VALUE=DATE:' + d2,
+    'SUMMARY:' + e(titulo), 'DESCRIPTION:' + e(det), ...(k.ciudad ? ['LOCATION:' + e(k.ciudad)] : []),
+    'BEGIN:VALARM', 'TRIGGER:-P7D', 'ACTION:DISPLAY', 'DESCRIPTION:Tu carrera es en una semana', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  return { g, ics: 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics) };
+}
+
+const CACO = `<details style="margin-top:4px"><summary class="sub" style="cursor:pointer;color:var(--texto)"><b>Cómo empezar a correr: método CACO</b></summary>
+  <div class="sub" style="margin-top:8px">CACO es <b style="color:var(--texto)">caminar y correr por intervalos</b>. Así llegas a correr los 5 km completos sin ahogarte ni lastimarte.</div>
+  <ol class="pasos">
+    <li><b>Calienta:</b> 5 minutos caminando rápido.</li>
+    <li><b>Etapa 1:</b> 1 min trotando + 2 min caminando. Repite hasta completar tu distancia.</li>
+    <li><b>Etapa 2:</b> 2 min trotando + 2 min caminando.</li>
+    <li><b>Etapa 3:</b> 3 min trotando + 1 min caminando.</li>
+    <li><b>Etapa 4:</b> 5 min trotando + 1 min caminando.</li>
+    <li><b>Etapa 5:</b> 8 min trotando + 1 min caminando.</li>
+    <li><b>Etapa 6:</b> corres toda la distancia sin parar 💪</li>
+  </ol>
+  <ul class="lista" style="margin-top:6px">
+    <li><span>✓ Trota a un ritmo en el que puedas platicar.</span></li>
+    <li><span>✓ Si te ahogas, camina hasta recuperarte y vuelve a trotar.</span></li>
+    <li><span>✓ Sube de etapa cuando la tuya se sienta fácil 2 salidas seguidas. Va por cómo te sientes, no por calendario.</span></li>
+    <li><span>✓ Si un día se siente pesado, regresa una etapa. No pasa nada.</span></li>
+  </ul></details>`;
+
+function pintarCorrer() {
+  const aviso = document.getElementById('correrAviso'), box = document.getElementById('correrBox');
+  if (!aviso || !box || !D.cliente.inicio) return;
+  const c = D.cliente, x = leerCorrer(), m = metasCorrer(x), k = x.carrera;
+  const campo = 'width:100%;margin-top:6px;padding:12px;border-radius:12px;border:1px solid var(--linea);background:var(--fondo,#0B0D0A);color:var(--texto);font:500 15px Poppins,sans-serif;box-sizing:border-box';
+
+  // Avisos en Hoy: la carrera siempre que no esté registrada; la prueba si no hay ninguna o toca repetirla al cerrar fase.
+  const avisos = [];
+  if (!k) avisos.push(`<div class="card"><div class="etq">Tu carrera final</div><div class="sub" style="margin-top:6px">Aún no registras tu carrera. Busca una en tu ciudad para el <b style="color:var(--texto)">${fechaLarga(fechaCarreraSugerida())}</b> o antes: una fecha en el calendario es la mejor razón para no saltarte el running.</div>
+    <button class="btn lima" data-cr="ir-carrera">Registrar mi carrera</button><button class="chip" data-cr="propia" style="margin-top:8px">No encontré: agéndala por mi cuenta</button></div>`);
+  const ultima = m.p.length ? m.p[m.p.length - 1].fecha : null;
+  const cortes = [c.fases[0], c.fases[0] + c.fases[1], c.duracion];
+  const toca = cortes.some((t) => c.dia >= t - 5 && c.dia <= t + 2) && ultima && ultima < mas(D.hoy, -10);
+  if (!m.p.length) avisos.push(`<div class="card"><div class="etq">Tu prueba de 5 km</div><div class="sub" style="margin-top:6px">Esta semana corre 5 km a tu ritmo y registra tu tiempo: es tu punto de partida. Si todavía no llegas a 5 km, registra lo más que corriste.</div><button class="btn borde" data-cr="ir-prueba">Registrar mi prueba</button></div>`);
+  else if (toca) avisos.push(`<div class="card"><div class="etq">Cierre de fase</div><div class="sub" style="margin-top:6px">Esta semana repite tu prueba de 5 km para ver cuánto has avanzado.</div><button class="btn borde" data-cr="ir-prueba">Registrar mi prueba</button></div>`);
+  aviso.innerHTML = avisos.join('');
+
+  // Prueba de 5 km en Mi avance
+  let prueba;
+  if (correrForm === 'prueba') {
+    prueba = `<div class="card" id="crPrueba"><div class="etq">Registrar prueba</div>
+      <div class="chico" style="margin-top:10px">Fecha</div><input type="date" id="crpF" value="${D.hoy}" max="${D.hoy}" style="${campo}">
+      <div class="chips" style="margin-top:12px"><button class="chip on" data-crcomp="si">Completé los 5 km</button><button class="chip" data-crcomp="no">No llegué a 5 km</button></div>
+      <div id="crpKmBox" style="display:none"><div class="chico" style="margin-top:10px">Kilómetros que corriste (lo más que llegaste)</div><input type="number" inputmode="decimal" step="0.1" min="0.2" max="4.9" id="crpKm" placeholder="Ej. 2.5" style="${campo}"></div>
+      <div class="chico" style="margin-top:10px">Tu tiempo</div>
+      <div class="fila"><input type="number" inputmode="numeric" min="0" id="crpMin" placeholder="min" style="${campo}"><input type="number" inputmode="numeric" min="0" max="59" id="crpSeg" placeholder="seg" style="${campo}"></div>
+      <div class="chico" id="crpError" style="color:#ff7a7a;margin-top:8px"></div>
+      <button class="btn lima" data-cr="guardar-prueba">Guardar</button><button class="chip" data-cr="cancelar" style="margin-top:8px">Cancelar</button></div>`;
+  } else if (!m.p.length) {
+    prueba = `<div class="card"><div class="etq">Tu prueba de 5 km</div><div class="sub" style="margin-top:6px">En tu primera semana corre 5 km a tu ritmo y registra el tiempo. Con eso la app calcula tu meta para el final del programa. Si aún no llegas a 5 km, registra lo más que corriste.</div><button class="btn lima" data-cr="ir-prueba">Registrar mi prueba</button></div>`;
+  } else {
+    const filas = [];
+    if (m.inicial) filas.push(`<li><span>Prueba inicial<br><span class="chico">${fechaCorta(m.inicial.fecha)}</span></span><span class="ok" style="text-align:right">${tiempoTxt(m.inicial.seg)}<br><span class="chico">${m.inicial.km} km</span></span></li>`);
+    if (m.mejor5 && m.mejor5 !== m.inicial) filas.push(`<li><span>Tu mejor 5 km<br><span class="chico">${fechaCorta(m.mejor5.fecha)}</span></span><span class="ok" style="text-align:right">${tiempoTxt(a5(m.mejor5))}<br><span class="chico">${tiempoTxt(a5(m.mejor5) / 5)} min/km</span></span></li>`);
+    if (m.metaSeg) filas.push(`<li><span><b>Tu meta</b><br><span class="chico">al ${fechaCorta(finPrograma())}</span></span><span class="ok" style="text-align:right"><b>${tiempoTxt(m.metaSeg)}</b><br><span class="chico">${tiempoTxt(m.metaSeg / 5)} min/km</span></span></li>`);
+    let texto;
+    if (!m.primer5) {
+      texto = `<div class="grande">${m.maxKm} km</div><div class="sub"><b style="color:var(--texto)">Tu primera meta: correr los 5 km completos.</b> Usa el método CACO y cada semana trota un poco más. Cuando los completes, registra tu tiempo y la app te pone tu meta de tiempo.</div>
+        <div class="barra"><i style="width:${Math.min(100, m.maxKm / 5 * 100)}%"></i></div><div class="chico" style="margin-top:6px">${m.maxKm} de 5 km</div>`;
+    } else {
+      const baja = a5(m.primer5) - a5(m.mejor5), falta = a5(m.mejor5) - m.metaSeg;
+      texto = `<div class="sub">${baja >= 5 ? `Ya bajaste <b style="color:var(--texto)">${tiempoTxt(baja)}</b> desde tu primer 5 km. ` : ''}${falta > 0 ? `Te faltan ${tiempoTxt(falta)} para tu meta: corre 1 o 2 veces por semana a ritmo cómodo y repite la prueba al cerrar cada fase.` : 'Ya llegaste a tu meta de tiempo 💪 Ahora a sostenerla y disfrutar tu carrera.'}</div>
+        ${m.pct ? `<div class="chico" style="margin-top:6px">Meta calculada: ${Math.round(m.pct * 100)}% menos que tu primer 5 km, lo esperado para quien corre con constancia hasta el final del programa.</div>` : ''}`;
+    }
+    prueba = `<div class="card"><div class="etq">Tu 5 km</div><div style="margin-top:8px">${texto}</div><ul class="lista" style="margin-top:8px">${filas.join('')}</ul>
+      ${m.p.length > 1 ? `<details><summary class="chico" style="cursor:pointer">Todas tus pruebas (${m.p.length})</summary><ul class="lista">${m.p.slice().reverse().map((q) => `<li><span>${fechaCorta(q.fecha)}</span><span class="chico">${q.km} km · ${tiempoTxt(q.seg)}</span></li>`).join('')}</ul></details>` : ''}
+      <button class="btn borde" data-cr="ir-prueba">Registrar nueva prueba</button></div>`;
+  }
+
+  // Carrera final
+  let carrera;
+  const sug = fechaCarreraSugerida();
+  if (correrForm === 'carrera') {
+    const v = k || {};
+    carrera = `<div class="card" id="crCarrera"><div class="etq">Tu carrera final</div>
+      <div class="sub" style="margin-top:6px">Busca una carrera en tu ciudad cerca del ${fechaLarga(sug)}, el fin de semana antes de que termine tu programa.</div>
+      <div class="chico" style="margin-top:10px">Nombre de la carrera</div><input id="crcN" value="${esc(v.propia ? '' : v.nombre || '')}" placeholder="Ej. Carrera Nocturna 5K" style="${campo}">
+      <div class="chico" style="margin-top:10px">Fecha</div><input type="date" id="crcF" value="${esc(v.fecha || sug)}" min="${D.hoy}" style="${campo}">
+      <div class="chico" style="margin-top:10px">Ciudad</div><input id="crcC" value="${esc(v.ciudad || '')}" placeholder="Ej. Monterrey" style="${campo}">
+      <div class="chico" style="margin-top:10px">Distancia</div><div class="chips" style="margin-top:6px">${['5 km', '10 km', '21 km'].map((dd) => `<button class="chip${(v.distancia || '5 km') === dd ? ' on' : ''}" data-crdist="${dd}">${dd}</button>`).join('')}</div>
+      <div class="chico" id="crcError" style="color:#ff7a7a;margin-top:8px"></div>
+      <button class="btn lima" data-cr="guardar-carrera">Guardar mi carrera</button>
+      <button class="btn borde" data-cr="propia">No encontré: agéndala por mi cuenta</button>
+      <button class="chip" data-cr="cancelar" style="margin-top:8px">Cancelar</button></div>`;
+  } else if (!k) {
+    carrera = `<div class="card"><div class="etq">Tu carrera final</div><div class="sub" style="margin-top:6px">Cierra tu programa corriendo una carrera. Busca una en tu ciudad para el ${fechaLarga(sug)} o antes. Si no hay, la agendamos por tu cuenta ese día.</div>
+      <button class="btn lima" data-cr="ir-carrera">Registrar mi carrera</button><button class="chip" data-cr="propia" style="margin-top:8px">No encontré: agéndala por mi cuenta</button></div>`;
+  } else {
+    const dias = Math.round((new Date(k.fecha + 'T12:00') - new Date(D.hoy + 'T12:00')) / 864e5), cal = linksCalendario(k);
+    carrera = `<div class="card hero"><div class="etq">Tu carrera final</div><div class="grande" style="font-size:22px">${esc(k.nombre)}</div>
+      <div class="sub">${esc(cap(fechaLarga(k.fecha)))} · ${esc(k.distancia)}${k.ciudad ? ' · ' + esc(k.ciudad) : ''}</div>
+      <div class="sub" style="margin-top:6px;color:var(--texto)">${dias > 0 ? `Faltan <b>${dias} días</b>` : dias === 0 ? '<b>Es hoy. A disfrutarla 💪</b>' : 'Ya pasó. Bien ahí ✅'}</div>
+      ${k.propia ? '<div class="chico" style="margin-top:6px">Por tu cuenta: corre tu distancia ese día, con reloj o Strava, como si fuera carrera oficial.</div>' : ''}
+      ${dias >= 0 ? `<div class="chico" style="margin-top:12px">Agéndala en tu calendario</div>
+      <a class="btn borde" href="${cal.g}" target="_blank" rel="noopener">Google Calendar</a>
+      <a class="btn borde" href="${cal.ics}" download="carrera-asf.ics">iPhone u Outlook</a>` : ''}
+      <button class="chip" data-cr="cambiar-carrera" style="margin-top:8px">Cambiar</button></div>`;
+  }
+
+  box.innerHTML = `<h2>Tu carrera y tu 5 km</h2>${carrera}${prueba}<div class="card">${CACO}</div>`;
+}
+
+function conectarCorrer() {
+  const manejar = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const box = document.getElementById('correrBox');
+    if (b.dataset.crcomp) { b.parentNode.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === b)); box.querySelector('#crpKmBox').style.display = b.dataset.crcomp === 'no' ? '' : 'none'; return; }
+    if (b.dataset.crdist) { b.parentNode.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', x === b)); return; }
+    const a = b.dataset.cr; if (!a) return;
+    const x = leerCorrer();
+    if (a === 'ir-carrera' || a === 'ir-prueba' || a === 'cambiar-carrera') {
+      correrForm = a === 'ir-prueba' ? 'prueba' : 'carrera';
+      if (tabActual !== 'avance') activar('avance');
+      pintarCorrer();
+      const f = document.getElementById(correrForm === 'prueba' ? 'crPrueba' : 'crCarrera'); if (f) f.scrollIntoView({ block: 'start' });
+      return;
+    }
+    if (a === 'cancelar') { correrForm = null; return pintarCorrer(); }
+    if (a === 'propia') { x.carrera = { nombre: 'Mi carrera ASF', fecha: fechaCarreraSugerida(), distancia: '5 km', ciudad: '', propia: true }; return guardarCorrer(x); }
+    if (a === 'guardar-carrera') {
+      const nombre = box.querySelector('#crcN').value.trim(), fecha = box.querySelector('#crcF').value, err = box.querySelector('#crcError');
+      if (!nombre) { err.textContent = 'Escribe el nombre de la carrera (o toca "No encontré").'; return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) { err.textContent = 'Elige la fecha de la carrera.'; return; }
+      x.carrera = { nombre, fecha, ciudad: box.querySelector('#crcC').value.trim(), distancia: (box.querySelector('[data-crdist].on') || {}).dataset?.crdist || '5 km', propia: false };
+      return guardarCorrer(x);
+    }
+    if (a === 'guardar-prueba') {
+      const completo = (box.querySelector('[data-crcomp].on') || {}).dataset?.crcomp !== 'no', err = box.querySelector('#crpError');
+      const km = completo ? 5 : Math.round(Number(box.querySelector('#crpKm').value) * 10) / 10;
+      const seg = (Number(box.querySelector('#crpMin').value) || 0) * 60 + (Number(box.querySelector('#crpSeg').value) || 0);
+      const fecha = box.querySelector('#crpF').value || D.hoy;
+      if (!completo && !(km > 0 && km < 5)) { err.textContent = 'Escribe cuántos kilómetros corriste (menos de 5).'; return; }
+      if (seg < 60 || seg / km < 150 || seg / km > 1200) { err.textContent = 'Revisa tu tiempo: minutos y segundos.'; return; }
+      x.pruebas.push({ fecha, km, seg });
+      return guardarCorrer(x);
+    }
+  };
+  ['correrAviso', 'correrBox'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', manejar); });
+  pintarCorrer();
 }
 
 // ---------- AYUDA RÁPIDA (solo lo que contesta la IA en servicio/problemas-y-soluciones.md) ----------
@@ -925,6 +1390,8 @@ function conectar() {
   Object.assign(tragos, leerJ(claveTragos(), {}));
   pintarAlcohol();
   conectarDia();
+  conectarMenu();
+  conectarCorrer();
   const bus = document.getElementById('buscar');
   bus.addEventListener('input', () => {
     const q = bus.value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
