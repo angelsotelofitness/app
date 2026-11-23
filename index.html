@@ -124,7 +124,7 @@ h2 { font-size: 21px; font-weight: 700; color: var(--texto); line-height: 1.2; m
 .reg > .chips { display: grid; grid-template-columns: 1fr 1fr; } .reg > .chips .chip { padding: 11px 6px; }
 .reg .cab { display: flex; align-items: center; gap: 12px; } .reg .cab b { font-size: 18px; display: block; } .reg .cab .der { margin-left: auto; text-align: right; font-size: 14px; }
 .reg .der .k { color: var(--lima); font-weight: 700; font-size: 16px; display: block; } .reg .der .p { color: var(--azul); font-weight: 600; } .reg .der .x { color: var(--tenue); }
-.icob.ok { background: var(--lima); color: #0B0D0A; font-weight: 800; }
+.icob.ok, .lista .icob.ok { background: var(--lima); color: #0B0D0A; font-weight: 800; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip { background: var(--tarjeta2); border: 1px solid var(--linea); color: var(--texto); border-radius: 12px; padding: 10px 13px; font: 500 14px Poppins, sans-serif; cursor: pointer; }
 .chip.on { background: var(--lima); color: #0B0D0A; border-color: var(--lima); font-weight: 600; }
@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = 'a048864c02cf', VERSION_TXT = '23 nov, 01:14'; // los pone publicar-app.js
+const VERSION = '300c1749700f', VERSION_TXT = '23 nov, 01:20'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -324,6 +324,9 @@ async function cargar() {
 
 function pintar() {
   const c = D.cliente;
+  TR = leerJ(claveTR(), null);
+  ((TR && TR.filas) || []).forEach((x) => { if (x[2] && trPeso(x[1]) && !c.peso.some((p) => p[0] === x[0])) c.peso.push([x[0], parseFloat(x[1].replace(',', '.'))]); });
+  c.peso.sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const h = new Date().getHours();
   document.getElementById('saludo').textContent = h < 12 ? 'Buen día' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
   document.getElementById('nombre').textContent = c.nombre;
@@ -349,7 +352,40 @@ function planDelDia(c, f) {
   return l;
 }
 
+// ---------- LO QUE YA ESTÁ EN TRAINERIZE (23 nov 2026, pedido de Angel: el cliente solo marca sus comidas) ----------
+// Viene en vivo de las pestañas "Trainerize hoy" y "Trainerize fotos" (App.gs, app_leer): filas [fecha, título, hecho] y fotos [fecha, hecho]
+// de los últimos 7 días. Se guarda en el celular para verlo sin internet.
+let TR = null;
+const claveTR = () => `asf-tr-${D.cliente.id}`;
+const trPeso = (t) => /^\d+([.,]\d+)?\s*kg/i.test(t);
+const trFuerza = (t) => /^\w+\.\s/.test(t);
+const TR_NO = /^(track body|take progress|(superior|inferior)$|calentamiento|salvavidas|abdomen)/i;
+function trDia(f) {
+  const l = ((TR && TR.filas) || []).filter((x) => x[0] === f);
+  const fz = l.filter((x) => trFuerza(x[1])), ca = l.filter((x) => !trFuerza(x[1]) && !trPeso(x[1]) && !TR_NO.test(x[1]) && !/photo/i.test(x[1]));
+  const p = l.find((x) => x[2] && trPeso(x[1]));
+  return { hay: l.length > 0, peso: p ? parseFloat(p[1].replace(',', '.')) : null, fz, ca, fzOk: fz.some((x) => x[2]), caOk: ca.some((x) => x[2]) };
+}
+const trLeidoHoy = () => !!(TR && TR.leido && TR.leido.slice(0, 10) === D.hoy);
+// Sesiones hechas de esta semana según Trainerize (para los puntos de Fuerza y Cardio).
+function trSemana(cual) { let n = 0; for (let f = lunesDe(D.hoy); f <= D.hoy; f = mas(f, 1)) { const x = trDia(f); if (x.hay && f >= D.cliente.inicio) n += cual === 'fz' ? x.fz.filter((s) => s[2]).length : x.caOk ? 1 : 0; } return n; }
+function refrescarHoy() {
+  const t = document.createElement('div'); t.innerHTML = vistaHoy(D.cliente);
+  ['heroHoy', 'semHoy'].forEach((id) => { const a = document.getElementById(id), b = t.querySelector('#' + id); if (a && b) a.innerHTML = b.innerHTML; });
+  pintarLista();
+}
+
 function sesionesDeHoy(c) {
+  const x = trDia(D.hoy), base = sesionesBase(c);
+  // Cliente con semana programada: manda su plan y Trainerize solo lo marca hecho. Los demás: manda su calendario de Trainerize si ya se leyó hoy.
+  if (usaPlan(c) || !x.hay || !trLeidoHoy()) return { ...base, lista: base.lista.map((s) => ({ ...s, hecha: s.hecha || (s.tipo === 'Cardio' ? x.caOk : x.fzOk) })) };
+  const lista = [], una = (l) => l.find((s) => s[2]) || l[0];
+  if (x.fz.length) lista.push({ f: D.hoy, t: una(x.fz)[1], tipo: 'Fuerza', hecha: x.fzOk, estado: x.fzOk ? 'Completada' : 'Pendiente' });
+  if (x.ca.length) lista.push({ f: D.hoy, t: una(x.ca)[1], tipo: 'Cardio', plan: !/^Running/.test(una(x.ca)[1]), hecha: x.caOk, estado: x.caOk ? 'Completada' : 'Pendiente' });
+  return { lista, agendadas: true };
+}
+
+function sesionesBase(c) {
   const hoy = D.hoy;
   const deHoy = c.sesiones.filter((s) => s.f === hoy && (/^\w+\./.test(s.t) || s.tipo === 'Cardio'));
   if (deHoy.length) return { lista: deHoy, agendadas: true };
@@ -409,15 +445,15 @@ function vistaHoy(c) {
   const pts = (h, m) => Array.from({ length: Math.max(m, h) }, (_, i) => `<span class="punto ${i < h ? 'lleno' : ''}">${i < h ? '✓' : ''}</span>`).join('');
   const cardioPlan = usaPlan(c) ? [0, 1, 2, 3, 4, 5, 6].filter((i) => planDelDia(c, mas(lunesDe(D.hoy < c.inicio ? c.inicio : D.hoy), i)).some((s) => s.tipo === 'Cardio')).length : 0;
   const sem = semana ? `<div class="card"><div class="fila">
-      <div><div class="chico">Fuerza esta semana</div><div class="puntos">${pts(semana.fzHechas, semana.fzMeta || 3)}</div></div>
-      <div><div class="chico">Cardio esta semana</div><div class="puntos">${usaPlan(c) ? pts(semana.runsHechos || 0, cardioPlan) : pts(semana.caHechas, semana.caMeta || 1)}</div></div>
+      <div><div class="chico">Fuerza esta semana</div><div class="puntos">${pts(Math.max(semana.fzHechas, trSemana('fz')), semana.fzMeta || 3)}</div></div>
+      <div><div class="chico">Cardio esta semana</div><div class="puntos">${usaPlan(c) ? pts(Math.max(semana.runsHechos || 0, trSemana('ca')), cardioPlan) : pts(Math.max(semana.caHechas, trSemana('ca')), semana.caMeta || 1)}</div></div>
     </div><div class="chico" style="margin-top:10px">La semana va de lunes a domingo. Si pierdes una sesión, reponla antes del domingo.</div></div>` : '';
   const sesionTxt = fuerza ? sesionDe(fuerza.t).nombre : 'tu sesión del día';
   // Mañana: saber desde hoy qué toca ayuda a cumplir (lo dijo un cliente en su encuesta).
   const p = proximaSesion(c);
   const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)}${p.cardio ? '' : ` · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}`}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
     : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
-  return `<section data-v="hoy">${hero}<div id="listaHoy"></div><div id="avisoCel"></div><div id="correrAviso"></div>${sem}${manana}
+  return `<section data-v="hoy"><div id="heroHoy">${hero}</div><div id="listaHoy"></div><div id="avisoCel"></div><div id="correrAviso"></div><div id="semHoy">${sem}</div>${manana}
     <h2>¿Se complicó tu día?</h2>
     <div class="card" id="arbol" data-sesion="${esc(sesionTxt)}" data-equipo="${equipoBase}">
       <div class="sub">El plan cambia el equipo y el tiempo, nunca la sesión. Responde dos preguntas:</div>
@@ -443,10 +479,9 @@ function vistaHoy(c) {
 }
 
 // ---------- LISTA DIARIA (22 nov 2026, pedido de Angel) ----------
-// Recordatorio de cada día en Hoy: peso, fotos (cuando tocan), sesión, comidas, menú y tragos.
-// Peso, fotos y sesión se registran en Trainerize; aquí solo se palomean (se guardan con el día, también en la nube).
-// Fotos: el día de inicio y un día antes de cada seguimiento (trainerize-carga/instrucciones.md). Si no las palomea,
-// el recordatorio sigue hasta el día de su sesión.
+// Arriba lo único que el cliente marca: comidas (y tragos y menú). Abajo peso, fotos y sesión, que se marcan solos con lo que hay en Trainerize
+// (23 nov 2026, pedido de Angel; antes se palomeaban a mano). Fotos: el día de inicio y un día antes de cada seguimiento
+// (trainerize-carga/instrucciones.md); si no están, el recordatorio sigue hasta el día de su sesión.
 function fotoPendiente(c) {
   const fechas = [[c.inicio, mas(c.inicio, 1), 'iniciales']].concat((c.hitos || []).map(([n, k]) => [mas(c.inicio, n - 1), mas(c.inicio, n), k]));
   const x = fechas.find(([f, hasta]) => D.hoy >= f && D.hoy <= hasta);
@@ -458,34 +493,35 @@ function pintarLista() {
   const el = document.getElementById('listaHoy'); if (!el) return;
   const c = D.cliente;
   if (D.hoy < c.inicio || D.hoy > finPrograma()) { el.innerHTML = ''; return; }
-  const d = leerDia(D.hoy), filas = [];
-  let total = 0, hechas = 0;
-  const fila = (icono, ok, nombre, sub, boton, cuenta = true) => {
-    if (cuenta) { total++; if (ok) hechas++; }
-    filas.push(`<li style="align-items:center"><span style="display:flex;align-items:center;gap:10px"><span class="icob ${ok ? 'ok' : ''}">${ok ? '✓' : icono}</span><span><b style="font-size:16px">${esc(nombre)}</b><br><span class="chico">${esc(sub)}</span></span></span>${boton}</li>`);
-  };
-  const marca = (k, ok, auto) => (auto ? '<span class="ok chico">Registrado</span>' : `<button class="chip${ok ? ' on' : ''}" data-marca="${k}" style="flex:none;padding:8px 12px">${ok ? 'Listo ✓' : 'Marcar'}</button>`);
-  const ir = (tab, txt) => `<button class="chip" data-lir="${tab}" style="flex:none;padding:8px 12px">${txt}</button>`;
-  const pesoT = c.peso.some((p) => p[0] === D.hoy);
-  fila('⚖️', pesoT || !!d.peso, 'Pésate', 'Al despertar, en ayunas. Regístralo en Trainerize', marca('peso', !!d.peso, pesoT));
+  const d = leerDia(D.hoy), t = trDia(D.hoy);
+  const fila = (icono, ok, nombre, sub, der) => `<li style="align-items:center"><span style="display:flex;align-items:center;gap:10px"><span class="icob ${ok ? 'ok' : ''}">${ok ? '✓' : icono}</span><span><b style="font-size:16px">${esc(nombre)}</b><br><span class="chico">${esc(sub)}</span></span></span>${der}</li>`;
+  const ir = (tab, txt, on) => `<button class="chip${on ? ' on' : ''}" data-lir="${tab}" style="flex:none;padding:8px 12px">${txt}</button>`;
+  const est = (ok) => `<span class="chico" style="flex:none;font-weight:700;${ok ? 'color:var(--lima)' : ''}">${ok ? 'Hecho' : 'Pendiente'}</span>`;
+
+  // Lo que él marca
+  const nc = PRINCIPALES.filter((n) => d.c[n] && d.c[n].estado).length, np = PRINCIPALES.length, r = resumenDia(D.hoy);
+  const hayMenu = !!(NUBE_MENU && NUBE_MENU.menu);
+  const mias = [
+    fila('🍽️', nc === np, 'Registra tus comidas', nc === np ? 'Listas las de hoy' : `${nc} de ${np} hoy`, ir('dia', nc === np ? 'Ver' : 'Registrar', nc < np)),
+    fila('🥃', false, 'Cuenta tus tragos', r.tragos ? `${r.tragos} ${r.tragos === 1 ? 'registrado' : 'registrados'} hoy` : 'Solo si tomas. Máximo 2', ir('tragos', 'Contar')),
+    fila('📋', false, 'Tu menú', hayMenu ? 'Revisa qué te toca comer' : 'Ármalo con tus números y tus gustos', ir('menu', hayMenu ? 'Ver' : 'Armar')),
+  ];
+
+  // Lo que se marca solo
+  const solas = [], pesoOk = t.peso != null || c.peso.some((p) => p[0] === D.hoy);
+  solas.push(fila('⚖️', pesoOk, 'Pésate', pesoOk && t.peso != null ? `${t.peso} kg hoy` : 'Al despertar, en ayunas', est(pesoOk)));
   const ft = fotoPendiente(c);
   if (ft && ft.hoy) {
-    const ok = !!leerJ(claveDia(ft.f), {}).fotos;
-    fila('📷', ok, ft.cual === 'iniciales' ? 'Tómate tus fotos iniciales' : 'Tómate tus fotos', ft.f === D.hoy ? 'Hoy te tocan. Súbelas en Trainerize' : 'Te tocaban ayer. Súbelas en Trainerize', marca('fotos', ok, false));
-  } else if (ft) fila('📷', false, 'Mañana te tocan tus fotos', 'Súbelas en Trainerize, antes de tu sesión con Angel', '', false);
+    const ok = ((TR && TR.fotos) || []).some((x) => x[1] && x[0] >= ft.f && x[0] <= mas(ft.f, 1));
+    solas.push(fila('📷', ok, ft.cual === 'iniciales' ? 'Tus fotos iniciales' : 'Tus fotos', ft.f === D.hoy ? 'Hoy te tocan' : 'Te tocaban ayer', est(ok)));
+  } else if (ft) solas.push(fila('📷', false, 'Mañana te tocan tus fotos', 'Antes de tu sesión con Angel', ''));
   const ses = sesionesDeHoy(c).lista;
-  if (!ses.length) fila('🚶', false, 'Hoy descansas', 'Si tienes tiempo, sal a caminar', '', false);
-  ses.forEach((s) => {
-    const k = s.tipo === 'Cardio' ? 'cardio' : 'sesion';
-    fila(s.tipo === 'Cardio' ? '🏃' : '🏋️', !!s.hecha || !!d[k], s.tipo === 'Cardio' ? (s.plan ? 'Cardio' : s.t) : sesionDe(s.t).nombre, 'Tu sesión de hoy. Regístrala en Trainerize', marca(k, !!d[k], !!s.hecha));
-  });
-  const nc = PRINCIPALES.filter((n) => d.c[n] && d.c[n].estado).length;
-  fila('🍽️', nc === PRINCIPALES.length, 'Registra tus comidas', `${nc} de ${PRINCIPALES.length} hoy`, ir('dia', 'Registrar'));
-  const r = resumenDia(D.hoy);
-  fila('🥃', false, 'Cuenta tus tragos', r.tragos ? `${r.tragos} ${r.tragos === 1 ? 'registrado' : 'registrados'} hoy` : 'Si tomas, regístralos. Máximo 2', ir('tragos', 'Contar'), false);
-  const hayMenu = !!(NUBE_MENU && NUBE_MENU.menu);
-  fila('📋', false, 'Tu menú', hayMenu ? 'Revisa qué te toca comer' : 'Ármalo con tus números y tus gustos', ir('menu', hayMenu ? 'Ver' : 'Armar'), false);
-  el.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:20px">Tu lista de hoy</b><span style="font-size:16px;font-weight:700;color:var(--lima)">${hechas} de ${total}</span></div><div class="barra"><i style="width:${total ? hechas / total * 100 : 0}%"></i></div><ul class="lista" style="margin-top:4px">${filas.join('')}</ul></div>`;
+  if (!ses.length) solas.push(fila('🚶', false, 'Hoy descansas', 'Si tienes tiempo, sal a caminar', ''));
+  ses.forEach((s) => solas.push(fila(s.tipo === 'Cardio' ? '🏃' : '🏋️', !!s.hecha, s.tipo === 'Cardio' ? (/^Running/.test(s.t) ? 'Running' : 'Cardio') : sesionDe(s.t).nombre, 'Tu sesión de hoy', est(!!s.hecha))));
+  const rev = TR && TR.leido ? `Última revisión: ${TR.leido.slice(0, 10) === D.hoy ? 'hoy' : fechaCorta(TR.leido.slice(0, 10))}, ${TR.leido.slice(11, 16)}.` : '';
+
+  el.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:20px">Lo que tú marcas</b><span style="font-size:16px;font-weight:700;color:var(--lima)">${nc} de ${np} comidas</span></div><div class="barra"><i style="width:${nc / np * 100}%"></i></div><ul class="lista" style="margin-top:4px">${mias.join('')}</ul></div>
+    <div class="card"><b style="font-size:18px">Se marca solo</b><div class="chico" style="margin-top:2px">Regístralo en Trainerize y aquí aparece durante el día. ${rev}</div><ul class="lista" style="margin-top:4px">${solas.join('')}</ul></div>`;
 }
 function conectarLista() {
   const el = document.getElementById('listaHoy'); if (!el) return;
@@ -499,12 +535,6 @@ function conectarLista() {
       if (meta) meta.scrollIntoView({ block: 'start' });
       return;
     }
-    const k = b.dataset.marca; if (!k) return;
-    const ft = k === 'fotos' ? fotoPendiente(D.cliente) : null;
-    const clave = claveDia(ft ? ft.f : D.hoy), d = leerJ(clave, {});
-    d.c = d.c || {}; if (d[k]) delete d[k]; else d[k] = true;
-    guardarJ(clave, d);
-    pintarLista();
   });
   pintarLista();
   pintarAvisoCel();
@@ -1145,6 +1175,7 @@ async function sincronizar() {
     if (!r.correr && tCorrer && tCorrer === leerCorrer().t && !pendCorrer && !lee(claveCorrer() + '-pend')) { guarda(claveCorrer(), null); pintarCorrer(); }
     // Lo que se registró antes de que existiera la nube: se sube una vez.
     for (let i = 0; i < 7; i++) { const f = mas(D.hoy, -i); if (!enNube.has(f) && !lee(claveT(f)) && resumenDia(f).hay) marcarCambio(f); }
+    if (r.trainerize) { const nuevo = JSON.stringify(r.trainerize); if (nuevo !== JSON.stringify(TR)) { TR = r.trainerize; guarda(claveTR(), nuevo); refrescarHoy(); } }
     NUBE_PREFS = r.preferencias || null; tomarMenus(r);
     if (r.correr && (Number(r.correr.t) || 0) > (Number(leerCorrer().t) || 0)) {
       try { localStorage.setItem(claveCorrer(), JSON.stringify({ carrera: r.correr.carrera || null, pruebas: r.correr.pruebas || [], t: r.correr.t })); } catch (e) {}
@@ -1831,7 +1862,7 @@ function conectar() {
 window.addEventListener('hashchange', () => location.reload());
 cargar();
 revisarVersion();
-setInterval(() => { if (document.visibilityState === 'visible') cargar(); }, 10 * 60e3);
+setInterval(() => { if (document.visibilityState === 'visible' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) cargar(); }, 10 * 60e3);
 </script>
 </body>
 </html>
