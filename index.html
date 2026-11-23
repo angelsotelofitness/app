@@ -351,7 +351,7 @@ function vistaHoy(c) {
   const p = proximaSesion(c);
   const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)}${p.cardio ? '' : ` · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}`}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
     : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
-  return `<section data-v="hoy">${hero}<div id="correrAviso"></div>${sem}${manana}
+  return `<section data-v="hoy">${hero}<div id="listaHoy"></div><div id="correrAviso"></div>${sem}${manana}
     <h2>¿Se complicó tu día?</h2>
     <div class="card" id="arbol" data-sesion="${esc(sesionTxt)}" data-equipo="${equipoBase}">
       <div class="sub">El plan cambia el equipo y el tiempo, nunca la sesión. Responde dos preguntas:</div>
@@ -374,6 +374,72 @@ function vistaHoy(c) {
       </ul><div class="chico">Es la misma sesión del día; solo cambia el equipo. Todos los planes están en tu app.</div></div>
     <div class="card"><div class="etq">¿Dormiste mal o llegas cansado?</div><div class="sub" style="margin-top:6px">Haz el Express de 20 minutos en lugar de la sesión completa. También cuenta.</div></div>
   </section>`;
+}
+
+// ---------- LISTA DIARIA (22 nov 2026, pedido de Angel) ----------
+// Recordatorio de cada día en Hoy: peso, fotos (cuando tocan), sesión, comidas, menú y tragos.
+// Peso, fotos y sesión se registran en Trainerize; aquí solo se palomean (se guardan con el día, también en la nube).
+// Fotos: el día de inicio y un día antes de cada seguimiento (trainerize-carga/instrucciones.md). Si no las palomea,
+// el recordatorio sigue hasta el día de su sesión.
+function fotoPendiente(c) {
+  const fechas = [[c.inicio, mas(c.inicio, 1), 'iniciales']].concat((c.hitos || []).map(([n, k]) => [mas(c.inicio, n - 1), mas(c.inicio, n), k]));
+  const x = fechas.find(([f, hasta]) => D.hoy >= f && D.hoy <= hasta);
+  if (x) return { f: x[0], cual: x[2], hoy: true };
+  const m = fechas.find(([f]) => f === mas(D.hoy, 1));
+  return m ? { f: m[0], cual: m[2], hoy: false } : null;
+}
+function pintarLista() {
+  const el = document.getElementById('listaHoy'); if (!el) return;
+  const c = D.cliente;
+  if (D.hoy < c.inicio || D.hoy > finPrograma()) { el.innerHTML = ''; return; }
+  const d = leerDia(), filas = [];
+  let total = 0, hechas = 0;
+  const fila = (ok, nombre, sub, boton, cuenta = true) => {
+    if (cuenta) { total++; if (ok) hechas++; }
+    filas.push(`<li style="align-items:center"><span style="display:flex;align-items:center;gap:10px"><span class="punto ${ok ? 'lleno' : ''}" style="flex:none">${ok ? '✓' : ''}</span><span><b>${esc(nombre)}</b><br><span class="chico">${esc(sub)}</span></span></span>${boton}</li>`);
+  };
+  const marca = (k, ok, auto) => (auto ? '<span class="ok chico">Registrado</span>' : `<button class="chip${ok ? ' on' : ''}" data-marca="${k}" style="flex:none;padding:8px 12px">${ok ? 'Listo ✓' : 'Marcar'}</button>`);
+  const ir = (tab, txt) => `<button class="chip" data-lir="${tab}" style="flex:none;padding:8px 12px">${txt}</button>`;
+  const pesoT = c.peso.some((p) => p[0] === D.hoy);
+  fila(pesoT || !!d.peso, 'Pésate', 'Al despertar, en ayunas. Regístralo en Trainerize', marca('peso', !!d.peso, pesoT));
+  const ft = fotoPendiente(c);
+  if (ft && ft.hoy) {
+    const ok = !!leerJ(claveDia(ft.f), {}).fotos;
+    fila(ok, ft.cual === 'iniciales' ? 'Tómate tus fotos iniciales' : 'Tómate tus fotos', ft.f === D.hoy ? 'Hoy te tocan. Súbelas en Trainerize' : 'Te tocaban ayer. Súbelas en Trainerize', marca('fotos', ok, false));
+  } else if (ft) fila(false, 'Mañana te tocan tus fotos', 'Súbelas en Trainerize, antes de tu sesión con Angel', '', false);
+  const ses = sesionesDeHoy(c).lista;
+  if (!ses.length) fila(false, 'Hoy descansas', 'Si tienes tiempo, sal a caminar', '', false);
+  ses.forEach((s) => {
+    const k = s.tipo === 'Cardio' ? 'cardio' : 'sesion';
+    fila(!!s.hecha || !!d[k], s.tipo === 'Cardio' ? (s.plan ? 'Cardio' : s.t) : sesionDe(s.t).nombre, 'Tu sesión de hoy. Regístrala en Trainerize', marca(k, !!d[k], !!s.hecha));
+  });
+  const nc = PRINCIPALES.filter((n) => d.c[n] && d.c[n].estado).length;
+  fila(nc === PRINCIPALES.length, 'Registra tus comidas', `${nc} de ${PRINCIPALES.length} hoy`, ir('dia', 'Registrar'));
+  const r = resumenDia(D.hoy);
+  fila(false, 'Cuenta tus tragos', r.tragos ? `${r.tragos} ${r.tragos === 1 ? 'registrado' : 'registrados'} hoy` : 'Si tomas, regístralos. Máximo 2', ir('tragos', 'Contar'), false);
+  const hayMenu = !!(NUBE_MENU && NUBE_MENU.menu);
+  fila(false, 'Tu menú', hayMenu ? 'Revisa qué te toca comer' : 'Ármalo con tus números y tus gustos', ir('menu', hayMenu ? 'Ver' : 'Armar'), false);
+  el.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><div class="etq">Tu lista de hoy</div><span class="chico">${hechas} de ${total}</span></div><ul class="lista" style="margin-top:4px">${filas.join('')}</ul></div>`;
+}
+function conectarLista() {
+  const el = document.getElementById('listaHoy'); if (!el) return;
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.lir) {
+      const tab = b.dataset.lir;
+      activar(tab === 'menu' ? 'comida' : 'dia');
+      const meta = tab === 'tragos' ? document.getElementById('contador') : tab === 'menu' ? document.getElementById('menuBox') : null;
+      if (meta) meta.scrollIntoView({ block: 'start' });
+      return;
+    }
+    const k = b.dataset.marca; if (!k) return;
+    const ft = k === 'fotos' ? fotoPendiente(D.cliente) : null;
+    const clave = claveDia(ft ? ft.f : D.hoy), d = leerJ(clave, {});
+    d.c = d.c || {}; if (d[k]) delete d[k]; else d[k] = true;
+    guardarJ(clave, d);
+    pintarLista();
+  });
+  pintarLista();
 }
 
 function resolverArbol() {
@@ -763,6 +829,7 @@ function pintarDia() {
     </div>`;
   document.getElementById('diaConsejo').innerHTML = consejoDia(meta, metaP, kcal, prot, faltan);
   pintarHistorial();
+  pintarLista();
 }
 
 function consejoDia(meta, metaP, kcal, prot, faltan) {
@@ -947,7 +1014,11 @@ async function sincronizar() {
     subirCorrer();
   } catch (e) { if (NUBE_OK) estadoNube(false); }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && D && D.cliente) subirPendientes(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || !D || !D.cliente) return;
+  subirPendientes();
+  // Cambió el día con la app abierta en segundo plano: la lista y la sesión arrancan de nuevo.
+  if (!LOCAL && hoyCDMX() !== D.hoy) { D.hoy = hoyCDMX(); pintar(); }
+});
 
 // ---------- Historial: últimos 7 días contra sus números ----------
 function pintarHistorial() {
@@ -1024,6 +1095,7 @@ function pedirFoto(nombre) {
 // ---------- Menú con sus números y sus gustos (como el GPT de Nutrición, dentro de la app) ----------
 const COCINA = ['Sartén', 'Horno', 'Microondas', 'Freidora de aire'];
 function pintarMenu() {
+  pintarLista();
   const el = document.getElementById('menuBox'); if (!el) return;
   if (!hayNube()) { el.innerHTML = ''; return; }
   if (!NUBE_PREFS || editandoPrefs) {
@@ -1412,6 +1484,7 @@ function conectar() {
   pintarAlcohol();
   conectarDia();
   conectarMenu();
+  conectarLista();
   conectarCorrer();
   const bus = document.getElementById('buscar');
   bus.addEventListener('input', () => {
