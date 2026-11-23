@@ -235,6 +235,8 @@ function sesionDe(t) {
 }
 
 let D = null;
+let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
+const VERSION = 'a048864c02cf', VERSION_TXT = '23 nov, 01:14'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -268,7 +270,7 @@ function pedirClave(codigo, error) {
     const v = document.getElementById('clave').value;
     if (!v.trim()) return;
     document.getElementById('entrar').textContent = 'Abriendo…';
-    try { D = await descifrar(codigo, v); guarda('asf-clave-' + codigo, v.trim().toUpperCase()); listo(); }
+    try { D = await descifrar(codigo, v); CODIGO = codigo; guarda('asf-clave-' + codigo, v.trim().toUpperCase()); listo(); }
     catch (e) { pedirClave(codigo, e.message === 'sin-archivo' ? 'No encontré tus datos. Pídele a Angel tu link de nuevo.' : 'La clave no es correcta. Revísala e intenta otra vez.'); }
   };
   document.getElementById('entrar').onclick = ir;
@@ -316,7 +318,7 @@ async function cargar() {
   guarda('asf-codigo', codigo);
   const clave = lee('asf-clave-' + codigo);
   if (!clave) return pedirClave(codigo);
-  try { D = await descifrar(codigo, clave); listo(); }
+  try { D = await descifrar(codigo, clave); CODIGO = codigo; listo(); }
   catch (e) { guarda('asf-clave-' + codigo, null); pedirClave(codigo); }
 }
 
@@ -326,7 +328,7 @@ function pintar() {
   document.getElementById('saludo').textContent = h < 12 ? 'Buen día' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
   document.getElementById('nombre').textContent = c.nombre;
   document.getElementById('main').innerHTML = vistaHoy(c) + vistaMiDia() + vistaAvance(c) + vistaComida(c) + vistaAyuda() + vistaRecursos() +
-    `<div class="pie">Beta · Método de Integración Híbrida<br>Datos de tu app al ${D.leido ? fechaCorta(D.leido) : '—'}${D.demo ? ' · DATOS DE PRUEBA' : ''}</div>`;
+    `<div class="pie">Beta · Método de Integración Híbrida<br>Datos de tu app al ${D.leido ? fechaCorta(D.leido) : '—'}${LOCAL ? '' : ' · Versión ' + VERSION_TXT}${D.demo ? ' · DATOS DE PRUEBA' : ''}</div>`;
   activar(tabActual);
   conectar();
   sincronizar();
@@ -517,7 +519,7 @@ const HORAS_AVISO = ['0430', '0500', '0530', '0600', '0630', '0700', '0730', '08
 const claveHoraAviso = () => `asf-hora-${D.cliente.id}`;
 let CAL_ID = null;
 async function prepararCal() {
-  const codigo = lee('asf-codigo');
+  const codigo = CODIGO;
   if (LOCAL || CAL_ID || !codigo) return;
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codigo));
   CAL_ID = Array.from(new Uint8Array(h)).map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 20);
@@ -1063,7 +1065,7 @@ const claveMenu = () => `asf-menu-${D.cliente.id}`;
 
 async function prepararNube() {
   if (LOCAL || !D.nube || TOKEN) return;
-  const codigo = lee('asf-codigo'), clave = lee('asf-clave-' + codigo);
+  const codigo = CODIGO, clave = lee('asf-clave-' + codigo);
   if (!codigo || !clave) return;
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codigo + ':' + clave.toUpperCase()));
   TOKEN = Array.from(new Uint8Array(h)).map((x) => x.toString(16).padStart(2, '0')).join('');
@@ -1118,6 +1120,7 @@ async function sincronizar() {
   await prepararNube();
   if (!D.nube || !TOKEN) return;
   try {
+    const pendDias = leerJ(clavePend(), []), pendCorrer = lee(claveCorrer() + '-pend'), tCorrer = leerCorrer().t || 0;
     const r = await nube('app_leer', {});
     NUBE_OK = true;
     const enNube = new Set();
@@ -1130,6 +1133,16 @@ async function sincronizar() {
         if (x.fecha === fDia()) cambioHoy = true;
       }
     });
+    // La cuenta manda: lo que está marcado como subido en este celular pero no está en su cuenta es de otro perfil
+    // (23 nov 2026: al cambiar de link en la misma pestaña se copiaba la carrera de la cuenta Prueba). Lo pendiente no se toca.
+    const pendAhora = leerJ(clavePend(), []);
+    for (let i = 0; i < 34; i++) {
+      const f = mas(D.hoy, -i);
+      if (enNube.has(f) || !lee(claveT(f)) || pendDias.includes(f) || pendAhora.includes(f)) continue;
+      [claveDia(f), claveTragos(f), claveT(f)].forEach((k) => guarda(k, null));
+      if (f === fDia()) cambioHoy = true;
+    }
+    if (!r.correr && tCorrer && tCorrer === leerCorrer().t && !pendCorrer && !lee(claveCorrer() + '-pend')) { guarda(claveCorrer(), null); pintarCorrer(); }
     // Lo que se registró antes de que existiera la nube: se sube una vez.
     for (let i = 0; i < 7; i++) { const f = mas(D.hoy, -i); if (!enNube.has(f) && !lee(claveT(f)) && resumenDia(f).hay) marcarCambio(f); }
     NUBE_PREFS = r.preferencias || null; tomarMenus(r);
@@ -1144,7 +1157,22 @@ async function sincronizar() {
     subirCorrer();
   } catch (e) { if (NUBE_OK) estadoNube(false); }
 }
+// Versión nueva (23 nov 2026): el celular guardaba la versión vieja de la página y no se actualizaba sola. Al abrir o volver a la app se compara
+// con version.json; si cambió, se baja la nueva y se recarga (una vez por versión, y nunca mientras escribe o espera un menú).
+async function revisarVersion() {
+  if (LOCAL || VERSION.startsWith('__')) return;
+  try {
+    const v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).v;
+    if (!v || v === VERSION) return;
+    const [ya, cuando] = (sessionStorage.getItem('asf-version') || '').split('|'); if (ya === v && Date.now() - Number(cuando) < 10 * 60e3) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || correrForm || editandoPrefs || menuEstado) return;
+    sessionStorage.setItem('asf-version', v + '|' + Date.now());
+    await fetch(location.pathname + location.search, { cache: 'reload' });
+    location.reload();
+  } catch (e) {}
+}
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || !D || !D.cliente) return;
+  revisarVersion();
   subirPendientes();
   // Cambió el día con la app abierta en segundo plano: la lista y la sesión arrancan de nuevo.
   if (!LOCAL && hoyCDMX() !== D.hoy) { D.hoy = hoyCDMX(); diaReg = null; semanaOff = 0; pintar(); }
@@ -1799,8 +1827,10 @@ function conectar() {
   });
 }
 
-window.addEventListener('hashchange', cargar);
+// Otro link en la misma pestaña = otro cliente: se recarga completa para no mezclar datos ni accesos, y de paso toma la versión nueva.
+window.addEventListener('hashchange', () => location.reload());
 cargar();
+revisarVersion();
 setInterval(() => { if (document.visibilityState === 'visible') cargar(); }, 10 * 60e3);
 </script>
 </body>
