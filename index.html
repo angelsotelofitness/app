@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = '300c1749700f', VERSION_TXT = '23 nov, 01:20'; // los pone publicar-app.js
+const VERSION = '4b63af728e33', VERSION_TXT = '23 nov, 01:37'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -359,12 +359,12 @@ let TR = null;
 const claveTR = () => `asf-tr-${D.cliente.id}`;
 const trPeso = (t) => /^\d+([.,]\d+)?\s*kg/i.test(t);
 const trFuerza = (t) => /^\w+\.\s/.test(t);
-const TR_NO = /^(track body|take progress|(superior|inferior)$|calentamiento|salvavidas|abdomen)/i;
+const TR_NO = /body stats|^(take progress|(superior|inferior)$|calentamiento|salvavidas|abdomen)/i;
 function trDia(f) {
   const l = ((TR && TR.filas) || []).filter((x) => x[0] === f);
   const fz = l.filter((x) => trFuerza(x[1])), ca = l.filter((x) => !trFuerza(x[1]) && !trPeso(x[1]) && !TR_NO.test(x[1]) && !/photo/i.test(x[1]));
   const p = l.find((x) => x[2] && trPeso(x[1]));
-  return { hay: l.length > 0, peso: p ? parseFloat(p[1].replace(',', '.')) : null, fz, ca, fzOk: fz.some((x) => x[2]), caOk: ca.some((x) => x[2]) };
+  return { hay: l.length > 0, peso: p ? parseFloat(p[1].replace(',', '.')) : null, pesoOk: !!p || l.some((x) => x[2] && /body stats/i.test(x[1])), fz, ca, fzOk: fz.some((x) => x[2]), caOk: ca.some((x) => x[2]) };
 }
 const trLeidoHoy = () => !!(TR && TR.leido && TR.leido.slice(0, 10) === D.hoy);
 // Sesiones hechas de esta semana según Trainerize (para los puntos de Fuerza y Cardio).
@@ -508,7 +508,7 @@ function pintarLista() {
   ];
 
   // Lo que se marca solo
-  const solas = [], pesoOk = t.peso != null || c.peso.some((p) => p[0] === D.hoy);
+  const solas = [], pesoOk = t.pesoOk || c.peso.some((p) => p[0] === D.hoy);
   solas.push(fila('⚖️', pesoOk, 'Pésate', pesoOk && t.peso != null ? `${t.peso} kg hoy` : 'Al despertar, en ayunas', est(pesoOk)));
   const ft = fotoPendiente(c);
   if (ft && ft.hoy) {
