@@ -269,10 +269,25 @@ function pintar() {
 }
 
 // ---------- HOY ----------
+// Semana programada del cliente (D.extra.semana, por día 0-6): "Tren Superior 1 · Plan A", "Cardio". Se usa cuando aún no hay
+// 3 semanas de historial de las que deducir qué toca (cliente nuevo, 22 nov 2026).
+function usaPlan(c) { return !!D.extra.semana && D.hoy < mas(c.inicio, 21); }
+function planDelDia(c, f) {
+  if (f < c.inicio || f >= mas(c.inicio, c.duracion)) return [];
+  const v = D.extra.semana[new Date(f + 'T12:00').getDay()];
+  if (!v || /descanso|libre|opcional/i.test(v)) return [];
+  const m = /^(?:Tren )?((?:Superior|Inferior).*?)\s*·\s*Plan\s+(\w+)/i.exec(v);
+  const l = [];
+  if (m) l.push({ f, t: `${m[2]}. ${m[1].replace(/\s*\+.*$/, '')}`, tipo: 'Fuerza', hecha: false, estado: 'Pendiente' });
+  if (!m || /\+\s*(running|cardio)/i.test(v)) l.push({ f, t: m ? 'Running' : v, tipo: 'Cardio', plan: true, hecha: false, estado: 'Pendiente' });
+  return l;
+}
+
 function sesionesDeHoy(c) {
   const hoy = D.hoy;
   const deHoy = c.sesiones.filter((s) => s.f === hoy && (/^\w+\./.test(s.t) || s.tipo === 'Cardio'));
   if (deHoy.length) return { lista: deHoy, agendadas: true };
+  if (usaPlan(c)) return { lista: planDelDia(c, hoy), agendadas: true };
   // Si la app aún no trae lo de hoy, se toma lo que hizo el mismo día de la semana en las últimas 3 semanas.
   for (const n of [7, 14, 21]) {
     const f = mas(hoy, -n);
@@ -285,6 +300,11 @@ function sesionesDeHoy(c) {
 function proximaSesion(c) {
   for (let n = 1; n <= 7; n++) {
     const f = mas(D.hoy, n);
+    if (usaPlan(c)) {
+      const l = planDelDia(c, f);
+      if (l.length) { const fz = l.find((s) => s.tipo === 'Fuerza'); return fz ? { f, s: sesionDe(fz.t) } : { f, s: { nombre: 'Cardio', plan: null }, cardio: true }; }
+      continue;
+    }
     for (const k of [7, 14]) {
       const l = c.sesiones.filter((s) => s.f === mas(f, -k) && /^\w+\./.test(s.t));
       if (l.length) return { f, s: sesionDe(l[0].t) };
@@ -310,8 +330,8 @@ function vistaHoy(c) {
       <a class="btn lima" href="${TRAINERIZE}" target="_blank" rel="noopener">Abrir mi sesión en Trainerize</a>
     </div>`;
   } else if (cardio) {
-    hero = `<div class="card hero"><div class="etq">Tu sesión de hoy</div><div class="grande">Running</div>
-      <div class="sub">5 km a un ritmo cómodo, en el que puedas platicar. Si te cansas, camina un poco y vuelve a trotar.</div>
+    hero = `<div class="card hero"><div class="etq">Tu sesión de hoy</div><div class="grande">${cardio.plan ? 'Cardio' : 'Running'}</div>
+      <div class="sub">${cardio.plan ? 'El objetivo de hoy está en tu sesión de Trainerize.' : '5 km a un ritmo cómodo, en el que puedas platicar. Si te cansas, camina un poco y vuelve a trotar.'}</div>
       ${cardio.hecha ? '<span class="estado ok">✓ Completada</span>' : '<span class="estado pend">● Pendiente</span>'}
       <a class="btn lima" href="${TRAINERIZE}" target="_blank" rel="noopener">Abrir Trainerize</a></div>`;
   } else {
@@ -321,14 +341,15 @@ function vistaHoy(c) {
       ${p ? `<div class="chico" style="margin-top:10px">Siguiente sesión: <b style="color:var(--texto)">${esc(p.s.nombre)}</b>, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}</div>` : ''}</div>`;
   }
   const pts = (h, m) => Array.from({ length: Math.max(m, h) }, (_, i) => `<span class="punto ${i < h ? 'lleno' : ''}">${i < h ? '✓' : ''}</span>`).join('');
+  const cardioPlan = usaPlan(c) ? [0, 1, 2, 3, 4, 5, 6].filter((i) => planDelDia(c, mas(lunesDe(D.hoy < c.inicio ? c.inicio : D.hoy), i)).some((s) => s.tipo === 'Cardio')).length : 0;
   const sem = semana ? `<div class="card"><div class="fila">
       <div><div class="chico">Fuerza esta semana</div><div class="puntos">${pts(semana.fzHechas, semana.fzMeta || 3)}</div></div>
-      <div><div class="chico">Cardio esta semana</div><div class="puntos">${pts(semana.caHechas, semana.caMeta || 1)}</div></div>
+      <div><div class="chico">Cardio esta semana</div><div class="puntos">${usaPlan(c) ? pts(semana.runsHechos || 0, cardioPlan) : pts(semana.caHechas, semana.caMeta || 1)}</div></div>
     </div><div class="chico" style="margin-top:10px">La semana va de lunes a domingo. Si pierdes una sesión, reponla antes del domingo.</div></div>` : '';
   const sesionTxt = fuerza ? sesionDe(fuerza.t).nombre : 'tu sesión del día';
   // Mañana: saber desde hoy qué toca ayuda a cumplir (lo dijo un cliente en su encuesta).
   const p = proximaSesion(c);
-  const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)} · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
+  const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)}${p.cardio ? '' : ` · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}`}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
     : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
   return `<section data-v="hoy">${hero}<div id="correrAviso"></div>${sem}${manana}
     <h2>¿Se complicó tu día?</h2>
