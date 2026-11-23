@@ -61,6 +61,38 @@ h2 { font-size: 13px; font-weight: 600; color: var(--suave); text-transform: upp
 .puntos { display: flex; gap: 6px; margin-top: 8px; }
 .punto { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--linea); display: grid; place-items: center; font-size: 13px; color: #0B0D0A; font-weight: 700; }
 .punto.lleno { background: var(--lima); border-color: var(--lima); }
+.numero + .numero { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--linea); }
+.numtop { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; font-weight: 600; color: var(--texto); }
+.numtop .pct { color: var(--lima); font-size: 17px; font-weight: 700; }
+.numero > b { display: block; font-size: 44px; line-height: 1.1; font-weight: 800; letter-spacing: -.5px; }
+.numero > b small { font-size: 17px; font-weight: 600; letter-spacing: 0; color: var(--suave); }
+.numero > b.pasa { color: var(--ambar); }
+.numero .barra { height: 22px; border-radius: 11px; background: #343D2E; margin-top: 10px; overflow: hidden; }
+.numero .barra i { display: block; height: 100%; border-radius: 11px; background: var(--lima); min-width: 4px; }
+.numero .barra i.pasa { background: var(--ambar); }
+.numpie { font-size: 15px; color: var(--suave); margin-top: 8px; }
+.numpie b { color: var(--texto); }
+.semtop { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.semtop .chip { padding: 6px 14px; }
+.semtop .chip:disabled { opacity: .25; }
+.semdias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 14px; }
+.semdias button { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 12px; color: var(--texto); font: 500 12px Poppins, sans-serif; padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+.semdias button span { color: var(--suave); }
+.semdias button b { font-size: 16px; }
+.semdias button i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--tenue); }
+.semdias button i.lleno { background: var(--lima); border-color: var(--lima); }
+.semdias button i.medio { background: var(--ambar); border-color: var(--ambar); }
+.semdias button.sel { border-color: var(--lima); background: var(--lima-osc); }
+.semdias button:disabled { opacity: .3; cursor: default; }
+.barras { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 130px; margin-top: 16px; }
+.barras button { background: none; border: 0; padding: 0; color: var(--suave); font: 500 12px Poppins, sans-serif; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; height: 100%; cursor: pointer; }
+.barras button span { height: 20px; line-height: 20px; }
+.barras button i { display: block; width: 100%; max-width: 30px; border-radius: 6px 6px 2px 2px; background: var(--lima); }
+.barras button i.medio { background: #465040; }
+.barras button i.pasa { background: var(--ambar); }
+.barras button:disabled { opacity: .4; cursor: default; }
+.barras .linea { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--suave); pointer-events: none; }
+.barras .linea span { position: absolute; right: 0; top: -18px; font-size: 11px; color: var(--suave); background: var(--tarjeta); padding: 0 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip { background: var(--tarjeta2); border: 1px solid var(--linea); color: var(--texto); border-radius: 12px; padding: 10px 13px; font: 500 14px Poppins, sans-serif; cursor: pointer; }
 .chip.on { background: var(--lima); color: #0B0D0A; border-color: var(--lima); font-weight: 600; }
@@ -392,7 +424,7 @@ function pintarLista() {
   const el = document.getElementById('listaHoy'); if (!el) return;
   const c = D.cliente;
   if (D.hoy < c.inicio || D.hoy > finPrograma()) { el.innerHTML = ''; return; }
-  const d = leerDia(), filas = [];
+  const d = leerDia(D.hoy), filas = [];
   let total = 0, hechas = 0;
   const fila = (ok, nombre, sub, boton, cuenta = true) => {
     if (cuenta) { total++; if (ok) hechas++; }
@@ -427,6 +459,7 @@ function conectarLista() {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.lir) {
       const tab = b.dataset.lir;
+      if (tab !== 'menu') verDia(null);
       activar(tab === 'menu' ? 'comida' : 'dia');
       const meta = tab === 'tragos' ? document.getElementById('contador') : tab === 'menu' ? document.getElementById('menuBox') : null;
       if (meta) meta.scrollIntoView({ block: 'start' });
@@ -441,67 +474,52 @@ function conectarLista() {
   });
   pintarLista();
   pintarAvisoCel();
+  prepararCal();
 }
 
 // ---------- RECORDATORIO EN EL CALENDARIO DEL CELULAR (23 nov 2026, ok de Angel) ----------
-// Un aviso al día a la hora que elija: pesarse y la sesión que toca, más un evento por cada día de fotos. Hasta el fin del programa.
-// Privado y como "disponible" para no ocupar su agenda de trabajo. Con UID fijo: si lo vuelve a agregar, reemplaza al anterior.
+// Los archivos .ics los deja publicar-app.js en cal/<huella del link>-<hora>.ics: un aviso diario (pesarse y revisar su sesión)
+// hasta el fin del programa y sus días de fotos. No llevan nombre ni datos del cliente, por eso pueden ir sin cifrar.
+// Van como archivo real (no "data:", que iPhone y Android no abren) y en iPhone como suscripción webcal.
+const HORAS_AVISO = ['0430', '0500', '0530', '0600', '0630', '0700', '0730', '0800', '0830', '0900'];
 const claveHoraAviso = () => `asf-hora-${D.cliente.id}`;
-function linksRecordatorio(hora) {
-  const c = D.cliente, fin = finPrograma(), desde = D.hoy > c.inicio ? D.hoy : c.inicio;
-  const H = hora.replace(':', '') + '00', dia = (f) => f.replace(/-/g, '');
-  const [hh, mm] = hora.split(':').map(Number), m2 = Math.min(hh * 60 + mm + 15, 1439);
-  const H2 = String(Math.floor(m2 / 60)).padStart(2, '0') + String(m2 % 60).padStart(2, '0') + '00';
-  const COD = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'], NOM = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const semana = D.extra.semana || null;
-  const corto = (s) => (/cardio|running/i.test(s) ? 'Cardio' : s.replace(/\s*·.*$/, '').replace(/^Tren\s+/i, ''));
-  const diarios = [];
-  for (let i = 0; i < 7; i++) {
-    const f = mas(desde, i); if (f > fin) break;
-    const w = new Date(f + 'T12:00:00').getDay();
-    const titulo = !semana ? 'Pésate y revisa tu sesión de hoy' : semana[w] ? `Pésate · Hoy te toca ${corto(semana[w])}` : 'Pésate · Hoy descansas';
-    diarios.push({ f, titulo, cod: COD[w] });
-  }
-  const fotos = (c.hitos || []).map(([n]) => mas(c.inicio, n - 1)).filter((f) => f >= D.hoy && f <= fin); // las iniciales se toman en el Diagnóstico
-  const det = 'Al despertar, en ayunas. Regístralo en Trainerize y revisa tu lista del día en tu app ASF.';
-  const detF = 'Súbelas en Trainerize, antes de tu sesión con Angel.';
-  const e = (s) => s.replace(/([,;\\])/g, '\\$1');
-  const sello = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
-  const alarma = (cuando, txt) => ['BEGIN:VALARM', 'TRIGGER:' + cuando, 'ACTION:DISPLAY', 'DESCRIPTION:' + e(txt), 'END:VALARM'];
-  const evento = (uid, f, titulo, desc, regla, alarmas) => ['BEGIN:VEVENT', `UID:${uid}-${c.id}@asftraining`, 'DTSTAMP:' + sello, 'SEQUENCE:' + Math.floor(Date.now() / 60000),
-    `DTSTART:${dia(f)}T${H}`, `DTEND:${dia(f)}T${H2}`, ...(regla ? ['RRULE:' + regla] : []), 'SUMMARY:' + e(titulo), 'DESCRIPTION:' + e(desc),
-    'CLASS:PRIVATE', 'TRANSP:TRANSPARENT', ...alarmas, 'END:VEVENT'];
-  const lineas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ASF Training//App//ES',
-    ...diarios.flatMap((g) => evento('diario-' + g.cod, g.f, g.titulo, det, `FREQ=WEEKLY;BYDAY=${g.cod};UNTIL=${dia(fin)}T235959`, alarma('PT0S', g.titulo))),
-    ...fotos.flatMap((f) => evento('fotos-' + dia(f), f, 'Hoy te tocan tus fotos', detF, '', [...alarma('PT0S', 'Hoy te tocan tus fotos'), ...alarma('-PT12H', 'Mañana te tocan tus fotos')])),
-    'END:VCALENDAR'];
-  // iCalendar pide líneas de máximo 75 bytes: las largas siguen en la siguiente con un espacio.
-  const ics = lineas.map((l) => { const o = []; let x = ''; for (const ch of l) { if (new TextEncoder().encode(x + ch).length > 72) { o.push(x); x = ' '; } x += ch; } o.push(x); return o.join('\r\n'); }).join('\r\n') + '\r\n';
-  const zona = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City';
-  const google = (f, titulo, desc, regla) => `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dia(f)}T${H}/${dia(f)}T${H2}&ctz=${encodeURIComponent(zona)}&trp=false&details=${encodeURIComponent(desc)}${regla ? '&recur=' + encodeURIComponent('RRULE:' + regla) : ''}`;
-  const txtSemana = semana ? '\n\nTu semana:\n' + [1, 2, 3, 4, 5, 6, 0].map((w) => `${NOM[w]}: ${semana[w] ? corto(semana[w]) : 'descanso'}`).join('\n') : '';
-  return {
-    ics: 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics), texto: ics,
-    g: google(desde, 'Pésate y revisa tu sesión de hoy', det + txtSemana, `FREQ=DAILY;UNTIL=${dia(mas(fin, 1))}T055959Z`),
-    fotos: fotos.map((f) => [f, google(f, 'Hoy te tocan tus fotos', detF, '')])
-  };
+let CAL_ID = null;
+async function prepararCal() {
+  const codigo = lee('asf-codigo');
+  if (LOCAL || CAL_ID || !codigo) return;
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codigo));
+  CAL_ID = Array.from(new Uint8Array(h)).map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 20);
+  pintarAvisoCel();
 }
 function pintarAvisoCel() {
   const el = document.getElementById('avisoCel'); if (!el) return;
-  if (D.hoy >= finPrograma()) { el.innerHTML = ''; return; }
-  const hora = /^\d\d:\d\d$/.test(lee(claveHoraAviso()) || '') ? lee(claveHoraAviso()) : '07:00';
+  const fin = finPrograma();
+  if (D.hoy >= fin || (!LOCAL && !CAL_ID)) { el.innerHTML = ''; return; }
+  const hora = HORAS_AVISO.includes(lee(claveHoraAviso())) ? lee(claveHoraAviso()) : '0700';
   const abierto = !!el.querySelector('details[open]');
-  const k = linksRecordatorio(hora);
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), android = /Android/.test(ua);
+  const url = new URL(`cal/${CAL_ID || 'local'}-${hora}.ics`, location.origin + location.pathname.replace(/[^/]*$/, '')).href;
+  const webcal = url.replace(/^https?:/, 'webcal:');
+  const hh = (h) => { const n = Number(h.slice(0, 2)); return `${n % 12 || 12}:${h.slice(2)} ${n < 12 ? 'am' : 'pm'}`; };
+  const zona = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City';
+  const desde = (D.hoy > D.cliente.inicio ? D.hoy : D.cliente.inicio).replace(/-/g, '');
+  const fin15 = hora.endsWith('30') ? hora.slice(0, 2) + '45' : hora.slice(0, 2) + '15';
+  const google = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Pésate y revisa tu sesión de hoy')}&dates=${desde}T${hora}00/${desde}T${fin15}00&ctz=${encodeURIComponent(zona)}&trp=false&details=${encodeURIComponent('Al despertar, en ayunas. Regístralo en Trainerize y revisa tu lista del día en tu app ASF.')}&recur=${encodeURIComponent(`RRULE:FREQ=DAILY;UNTIL=${mas(fin, 1).replace(/-/g, '')}T055959Z`)}`;
+  const plan2 = (txt, href, nota) => `<div class="chico" style="margin-top:14px"><b style="color:var(--texto)">¿No se abrió?</b> ${nota}</div><a class="btn borde" href="${href}" target="_blank" rel="noopener">${txt}</a>`;
+  const botones = ios ? `<a class="btn lima" style="margin-top:12px" href="${webcal}">Agregar a mi calendario</a>
+      <div class="chico" style="margin-top:6px">Toca Suscribirse y deja "Eliminar alarmas" apagado.</div>${plan2('Abrir el archivo', url, 'Ábrelo en Safari y elige "Agregar todos".')}`
+    : android ? `<a class="btn lima" style="margin-top:12px" href="${url}" target="_blank" rel="noopener">Agregar a mi calendario</a>
+      <div class="chico" style="margin-top:6px">Abre el archivo que se descarga, elige Calendario y guarda todos.</div>${plan2('Google Calendar', google, 'Antes de guardar, toca "No se repite", elige "Todos los días" y ponle de fecha final el ' + esc(fechaCorta(fin)) + '.')}`
+    : `<a class="btn lima" style="margin-top:12px" href="${url}">Outlook o Apple Calendar</a><a class="btn borde" href="${google}" target="_blank" rel="noopener">Google Calendar</a>`;
   el.innerHTML = `<details${abierto ? ' open' : ''}><summary><b>Que te avise tu celular</b></summary><div style="padding:0 16px 18px">
-    <div class="sub">Un aviso al día en tu calendario: pesarte, la sesión que te toca y tus días de fotos. Termina solo con tu programa.</div>
-    <label class="chico" style="display:flex;align-items:center;gap:10px;margin-top:12px">A qué hora te levantas <input type="time" id="horaAviso" value="${hora}" style="width:auto;margin:0;padding:8px 10px;border-radius:10px;border:1px solid var(--linea,#333);background:transparent;color:var(--texto);font:inherit;font-size:16px;color-scheme:dark"></label>
-    <a class="btn lima" style="margin-top:12px" href="${k.ics}" download="recordatorios-asf.ics">iPhone u Outlook</a>
-    <div class="chico" style="margin-top:6px">Ábrelo y elige "Agregar todos".</div>
-    <a class="btn borde" href="${k.g}" target="_blank" rel="noopener">Google Calendar (Android)</a>
-    <div class="chico" style="margin-top:6px">Dale Guardar y déjale su notificación.${k.fotos.length ? ' Tus días de fotos se agregan aparte:' : ''}</div>
-    ${k.fotos.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${k.fotos.map(([f, u]) => `<a class="chip" style="text-decoration:none" href="${u}" target="_blank" rel="noopener">${esc(fechaCorta(f))}</a>`).join('')}</div>` : ''}
+    <div class="sub">Un aviso todos los días para pesarte y revisar tu sesión, y otro en tus días de fotos. Se repite hasta que termine tu programa (${esc(fechaCorta(fin))}).</div>
+    <div class="chico" style="margin-top:12px">A qué hora te levantas</div>
+    <div class="chips">${HORAS_AVISO.map((h) => `<button class="chip${h === hora ? ' on' : ''}" data-hora="${h}" style="padding:8px 11px">${hh(h)}</button>`).join('')}</div>
+    ${botones}
+    <div class="chico" style="margin-top:10px">Si cambias la hora, borra primero el aviso anterior.</div>
   </div></details>`;
-  document.getElementById('horaAviso').addEventListener('change', (ev) => { if (ev.target.value) { guarda(claveHoraAviso(), ev.target.value); pintarAvisoCel(); } });
+  el.querySelectorAll('[data-hora]').forEach((b) => b.addEventListener('click', () => { guarda(claveHoraAviso(), b.dataset.hora); pintarAvisoCel(); }));
+  if (abierto) el.querySelector('details').open = true;
 }
 
 function resolverArbol() {
@@ -628,6 +646,7 @@ function vistaComida() {
     <div class="card hero"><div class="etq">Tus números</div><div style="margin-top:10px">${nums}</div>
       <div class="sub" style="margin-top:10px">Lo más importante es la cantidad: llegar a tu proteína y no pasarte de tus calorías. Se evalúa el promedio de la semana, nunca un solo día.</div>
       <a class="btn lima" href="${GPT}" target="_blank" rel="noopener">Abrir la IA de Nutrición ASF</a></div>
+    <div id="semanaNutri"></div>
     <div id="menuBox"></div>
     ${reparto}${importante}
     <div class="card"><div class="etq">Registra tu día</div><div class="sub" style="margin-top:6px">Marca tus comidas y tus tragos en la pestaña <b style="color:var(--texto)">Mi día</b>: la app te dice cuánto te queda y cómo ajustar el resto del día.</div><button class="btn borde" data-ir="dia">Ir a Mi día</button></div>
@@ -788,7 +807,17 @@ const sinAcentos = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u03
 // Las comidas que faltan son las que aún no marca; con eso la app reparte lo que le queda.
 const COMIDAS = ['Desayuno', 'Comida', 'Cena', 'Colación'];
 const PRINCIPALES = ['Desayuno', 'Comida', 'Cena'];
-const leerDia = () => { const d = leerJ(claveDia(), {}); d.c = d.c || {}; return d; };
+// Mi día puede abrir un día anterior para completarlo (23 nov 2026, pedido de Angel). null = hoy.
+let diaReg = null, semanaOff = 0;
+const fDia = () => diaReg || D.hoy;
+const leerDia = (f = fDia()) => { const d = leerJ(claveDia(f), {}); d.c = d.c || {}; return d; };
+function verDia(f) {
+  diaReg = !f || f === D.hoy ? null : f;
+  editando = null; Object.keys(fotoRes).forEach((k) => delete fotoRes[k]);
+  Object.keys(tragos).forEach((k) => delete tragos[k]); Object.assign(tragos, leerJ(claveTragos(fDia()), {}));
+  if (!diaReg) semanaOff = 0;
+  pintarAlcohol(); pintarComidas(); pintarDia();
+}
 let editando = null; // comida con la lista de alimentos abierta
 
 // Lo que vale una comida "del plan": del PDF del cliente (datos/app.json → comidas) o su número diario entre 3.
@@ -799,7 +828,7 @@ function valorPlan(nombre) {
   return { kcal: Math.round((Number(x.kcal) || 0) / 3), prot: Math.round((Number(x.proteina) || 0) / 3) };
 }
 function totalComida(c, nombre) {
-  if (!c) return { kcal: 0, prot: 0 };
+  if (!c || c.estado === 'no') return { kcal: 0, prot: 0 };
   if (c.estado === 'plan') return valorPlan(nombre);
   let kcal = 0, prot = 0;
   Object.entries(c.items || {}).forEach(([k, q]) => { const a = ALIM[k]; if (a && q) { kcal += a[3] * q; prot += a[4] * q; } });
@@ -809,18 +838,19 @@ function totalComida(c, nombre) {
 
 function vistaMiDia() {
   return `<section data-v="dia">
-    <div class="card hero"><div class="etq">Tu día en números</div>
-      <div id="diaResumen" style="margin-top:10px"></div>
+    <div id="semanaDias"></div>
+    <div class="card hero"><div class="etq" id="diaTitulo">Tu día en números</div>
+      <div id="diaResumen" style="margin-top:12px"></div>
       <div class="resultado on" id="diaConsejo"></div></div>
-    <h2>Tus comidas de hoy</h2>
+    <h2 id="diaH2">Tus comidas de hoy</h2>
     <div class="sub" style="margin:-4px 0 10px">Marca cada comida al terminarla. Si fue fuera del plan, agrega lo que comiste y la app ajusta el resto de tu día.</div>
     <div id="diaComidas"></div>
-    <h2>Tragos de hoy</h2>
+    <h2 id="diaH2t">Tragos de hoy</h2>
     <div class="card" id="contador"><div class="sub">Lo mejor es no tomar. Si tomas: máximo 2 destilados con agua mineral. Se suman solos a tu día.</div>
       <ul class="lista" style="margin-top:6px">${BEBIDAS.map(([k, n, d, kcal]) => `<li style="align-items:center"><span><b>${esc(n)}</b><br><span class="chico">${esc(d)} · ${kcal} kcal</span></span>
         <span style="display:flex;align-items:center;gap:8px;flex:none"><button class="chip" data-menos="${k}" style="padding:6px 12px">−</button><b data-n="${k}" style="min-width:16px;text-align:center">0</b><button class="chip" data-mas="${k}" style="padding:6px 12px">+</button></span></li>`).join('')}</ul>
       <div class="resultado on" id="totalAlcohol"></div></div>
-    <h2>Tus últimos 7 días</h2>
+    <h2>Tu semana</h2>
     <div class="card" id="historial"></div>
     <div class="chico" style="margin:4px 4px 0">Los valores son aproximados por porción casera. <span id="nubeEstado">Tu registro se guarda en este celular.</span> Cada día empieza en cero.</div>
   </section>`;
@@ -832,6 +862,7 @@ function htmlComida(nombre, c) {
   const chips = `<div class="chips" style="margin-top:8px">
       ${conMeta || nombre !== 'Colación' ? `<button class="chip${est === 'plan' ? ' on' : ''}" data-estado="plan" data-c="${nombre}">Del plan</button>` : ''}
       <button class="chip${est === 'fuera' ? ' on' : ''}" data-estado="fuera" data-c="${nombre}">${nombre === 'Colación' ? 'Registrar' : 'Fuera del plan'}</button>
+      ${nombre !== 'Colación' ? `<button class="chip${est === 'no' ? ' on' : ''}" data-estado="no" data-c="${nombre}">No la hice</button>` : ''}
       ${hayNube() ? `<button class="chip" data-foto="${nombre}">📷 Foto</button>` : ''}</div>${htmlFoto(nombre)}`;
   let detalle = '';
   if (est === 'fuera') {
@@ -843,7 +874,7 @@ function htmlComida(nombre, c) {
   }
   return `<div class="card" data-comida="${nombre}">
     <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:16px">${nombre}</b>
-      <span class="${est ? 'ok' : 'chico'}" style="font-size:13px">${est ? `${t.kcal.toLocaleString('es-MX')} kcal · ${t.prot} g` : 'Pendiente'}</span></div>
+      <span class="${est ? 'ok' : 'chico'}" style="font-size:13px">${est === 'no' ? 'No la hice' : est ? `${t.kcal.toLocaleString('es-MX')} kcal · ${t.prot} g` : 'Pendiente'}</span></div>
     ${chips}${detalle}</div>`;
 }
 
@@ -877,19 +908,29 @@ function pintarComidas() {
 
 function pintarDia() {
   const el = document.getElementById('diaResumen'); if (!el) return;
-  const x = D.extra, d = leerDia(), t = leerJ(claveTragos(), {});
+  const x = D.extra, d = leerDia(), t = leerJ(claveTragos(fDia()), {});
   let kcal = 0, prot = 0;
   COMIDAS.forEach((n) => { const v = totalComida(d.c[n], n); kcal += v.kcal; prot += v.prot; });
   kcal += BEBIDAS.reduce((s, [k, , , c]) => s + (t[k] || 0) * c, 0);
   const vacia = (c) => !c || !c.estado || (c.estado === 'fuera' && !Object.keys(c.items || {}).length && !(c.otros || []).length);
   const faltan = PRINCIPALES.filter((n) => vacia(d.c[n])).length;
   const meta = Number(x.kcal) || 0, metaP = Number(x.proteina) || 0;
-  const barra = (v, m) => `<div style="height:8px;border-radius:6px;background:var(--tarjeta2);margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.min(100, m ? v / m * 100 : 0)}%;background:${m && v > m ? 'var(--ambar)' : 'var(--lima)'}"></div></div>`;
-  el.innerHTML = `<div class="fila">
-      <div class="mini"><span class="chico">Calorías${meta ? ' · te quedan' : ''}</span><b>${(meta ? Math.max(0, meta - kcal) : kcal).toLocaleString('es-MX')}</b><span class="chico">${kcal.toLocaleString('es-MX')}${meta ? ' de ' + meta.toLocaleString('es-MX') : ''} kcal</span>${meta ? barra(kcal, meta) : ''}</div>
-      ${metaP ? `<div class="mini"><span class="chico">Proteína · te falta</span><b>${Math.max(0, metaP - prot)} g</b><span class="chico">${prot} de ${metaP} g</span>${barra(prot, metaP)}</div>` : `<div class="mini"><span class="chico">Proteína</span><b>${prot} g</b><span class="chico">llevas hoy</span></div>`}
-    </div>`;
-  document.getElementById('diaConsejo').innerHTML = consejoDia(meta, metaP, kcal, prot, faltan);
+  const num = (n) => n.toLocaleString('es-MX');
+  const numero = (nombre, v, m, u, quedan, faltanTxt) => {
+    const pasa = m && v > m, pct = m ? Math.round(v / m * 100) : 0;
+    return `<div class="numero"><div class="numtop"><span>${nombre}${m ? (pasa && u === 'kcal' ? ' · te pasaste' : ' · ' + (diaReg ? faltanTxt : quedan)) : ''}</span>${m ? `<span class="pct">${pct}%</span>` : ''}</div>
+      <b class="${pasa && u === 'kcal' ? 'pasa' : ''}">${num(m ? Math.abs(u === 'kcal' ? m - v : Math.max(0, m - v)) : v)} <small>${u}</small></b>
+      ${m ? `<div class="barra"><i class="${pasa && u === 'kcal' ? 'pasa' : ''}" style="width:${Math.min(100, pct)}%"></i></div>` : ''}
+      <div class="numpie">${m ? `${diaReg ? 'Registraste' : 'Llevas'} <b>${num(v)}</b> de ${num(m)} ${u}` : 'llevas'}</div></div>`;
+  };
+  el.innerHTML = numero('Calorías', kcal, meta, 'kcal', 'te quedan', 'quedaron') + numero('Proteína', prot, metaP, 'g', 'te faltan', 'faltaron');
+  document.getElementById('diaTitulo').textContent = diaReg ? fechaLarga(diaReg) : 'Tu día en números';
+  document.getElementById('diaH2').textContent = diaReg ? `Tus comidas del ${fechaLarga(diaReg)}` : 'Tus comidas de hoy';
+  document.getElementById('diaH2t').textContent = diaReg ? `Tragos del ${fechaLarga(diaReg)}` : 'Tragos de hoy';
+  document.getElementById('diaConsejo').innerHTML = diaReg
+    ? `<h3>Estás registrando el ${esc(fechaLarga(diaReg))}</h3><p>${faltan ? `Te ${faltan === 1 ? 'falta 1 comida' : 'faltan ' + faltan + ' comidas'} por marcar de ese día.` : 'Día completo ✓'}</p><button class="btn lima" data-verdia="${D.hoy}">Volver a hoy</button>`
+    : consejoDia(meta, metaP, kcal, prot, faltan);
+  pintarSemanaDias();
   pintarHistorial();
   pintarLista();
 }
@@ -960,7 +1001,7 @@ function conectarDia() {
       r.agregado = true;
     } else if (b.dataset.fotocerrar) delete fotoRes[n];
     else return;
-    guardarJ(claveDia(), d);
+    guardarJ(claveDia(fDia()), d);
     if (todo) pintarComidas();
     else { const t = totalComida(c, n), s = box.querySelector(`[data-comida="${n}"] .ok`); if (s) s.textContent = `${t.kcal.toLocaleString('es-MX')} kcal · ${t.prot} g`; }
     pintarDia();
@@ -1019,9 +1060,10 @@ function estadoNube(ok) {
 function resumenDia(f) {
   const c = leerJ(claveDia(f), {}).c || {}, t = leerJ(claveTragos(f), {});
   let kcal = 0, prot = 0, delPlan = 0, fuera = 0, tr = 0;
-  COMIDAS.forEach((n) => { const x = c[n]; if (!x || !x.estado) return; const v = totalComida(x, n); kcal += v.kcal; prot += v.prot; if (x.estado === 'plan') delPlan++; else fuera++; });
+  COMIDAS.forEach((n) => { const x = c[n]; if (!x || !x.estado) return; const v = totalComida(x, n); kcal += v.kcal; prot += v.prot; if (x.estado === 'plan') delPlan++; else if (x.estado === 'fuera') fuera++; });
+  const marcadas = PRINCIPALES.filter((n) => c[n] && c[n].estado).length;
   BEBIDAS.forEach(([k, , , cal]) => { kcal += (t[k] || 0) * cal; if (k !== 'mezclador') tr += t[k] || 0; });
-  return { kcal, prot, delPlan, fuera, tragos: tr, metaKcal: Number(D.extra.kcal) || 0, metaProt: Number(D.extra.proteina) || 0, hay: delPlan + fuera + tr > 0 };
+  return { kcal, prot, delPlan, fuera, tragos: tr, metaKcal: Number(D.extra.kcal) || 0, metaProt: Number(D.extra.proteina) || 0, marcadas, completo: marcadas === PRINCIPALES.length, hay: delPlan + fuera + tr + marcadas > 0 };
 }
 
 function marcarCambio(f) {
@@ -1058,7 +1100,7 @@ async function sincronizar() {
       if (x.actualizado > (Number(lee(claveT(x.fecha))) || 0)) {
         try { localStorage.setItem(claveDia(x.fecha), JSON.stringify(x.dia || {})); localStorage.setItem(claveTragos(x.fecha), JSON.stringify(x.tragos || {})); } catch (e) {}
         guarda(claveT(x.fecha), String(x.actualizado));
-        if (x.fecha === D.hoy) cambioHoy = true;
+        if (x.fecha === fDia()) cambioHoy = true;
       }
     });
     // Lo que se registró antes de que existiera la nube: se sube una vez.
@@ -1069,7 +1111,7 @@ async function sincronizar() {
       pintarCorrer();
     }
     guardarJ(claveMenu(), { prefs: NUBE_PREFS, menu: NUBE_MENU });
-    if (cambioHoy) { Object.keys(tragos).forEach((k) => delete tragos[k]); Object.assign(tragos, leerJ(claveTragos(), {})); pintarAlcohol(); }
+    if (cambioHoy) { Object.keys(tragos).forEach((k) => delete tragos[k]); Object.assign(tragos, leerJ(claveTragos(fDia()), {})); pintarAlcohol(); }
     pintarComidas(); pintarDia(); pintarMenu();
     estadoNube(true);
     subirPendientes();
@@ -1079,34 +1121,62 @@ async function sincronizar() {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || !D || !D.cliente) return;
   subirPendientes();
   // Cambió el día con la app abierta en segundo plano: la lista y la sesión arrancan de nuevo.
-  if (!LOCAL && hoyCDMX() !== D.hoy) { D.hoy = hoyCDMX(); pintar(); }
+  if (!LOCAL && hoyCDMX() !== D.hoy) { D.hoy = hoyCDMX(); diaReg = null; semanaOff = 0; pintar(); }
 });
 
-// ---------- Historial: últimos 7 días contra sus números ----------
-function pintarHistorial() {
-  const el = document.getElementById('historial'); if (!el) return;
-  const dias = [];
-  for (let i = 0; i < 7; i++) { const f = mas(D.hoy, -i); dias.push([f, resumenDia(f)]); }
-  const con = dias.filter(([, r]) => r.hay);
-  if (!con.length) { el.innerHTML = '<div class="sub">Aquí verás tus días registrados y tu promedio de la semana.</div>'; return; }
+// ---------- Tu semana (23 nov 2026, pedido de Angel): promedio y total contra su objetivo; se toca un día para completarlo ----------
+// Al promedio solo entran los días con sus 3 comidas marcadas: un día a medias bajaría el promedio sin ser cierto.
+// La nube guarda a la mano 35 días (App.gs), por eso se puede regresar hasta 4 semanas.
+function datosSemana(off = semanaOff) {
+  const lun = mas(lunesDe(D.hoy), -7 * off);
+  const dias = [0, 1, 2, 3, 4, 5, 6].map((i) => { const f = mas(lun, i); return { f, r: resumenDia(f), futuro: f > D.hoy, antes: f < D.cliente.inicio }; });
+  const con = dias.filter((x) => !x.futuro && x.r.completo);
   const meta = Number(D.extra.kcal) || 0, metaP = Number(D.extra.proteina) || 0;
-  const prom = (k) => Math.round(con.reduce((s, [, r]) => s + r[k], 0) / con.length);
-  const pk = prom('kcal'), pp = prom('prot');
-  const nombreDia = (f, i) => i === 0 ? 'Hoy' : i === 1 ? 'Ayer' : new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' });
-  const filas = dias.map(([f, r], i) => {
-    if (!r.hay) return `<li><span>${esc(nombreDia(f, i))}</span><span class="chico">Sin registro</span></li>`;
-    const pasado = meta && r.kcal > meta * 1.05;
-    return `<li><span><b>${esc(nombreDia(f, i))}</b><br><span class="chico">${r.delPlan} del plan · ${r.fuera} fuera${r.tragos ? ` · ${r.tragos} ${r.tragos === 1 ? 'trago' : 'tragos'}` : ''}</span></span>
-      <span class="${pasado ? 'chico' : 'ok'}" style="text-align:right">${r.kcal.toLocaleString('es-MX')} kcal<br><span class="chico">${r.prot} g prot</span></span></li>`;
-  }).join('');
-  const veredicto = !meta ? '' : pk <= meta * 1.05 ? 'Vas dentro de tu número 💪' : `Vas ${(pk - meta).toLocaleString('es-MX')} kcal arriba en promedio: ajusta una comida al día.`;
-  el.innerHTML = `<div class="fila">
-      <div class="mini"><span class="chico">Promedio · ${con.length} ${con.length === 1 ? 'día' : 'días'}</span><b>${pk.toLocaleString('es-MX')}</b><span class="chico">kcal${meta ? ' de ' + meta.toLocaleString('es-MX') : ''}</span></div>
-      <div class="mini"><span class="chico">Proteína promedio</span><b>${pp} g</b><span class="chico">${metaP ? 'de ' + metaP + ' g' : 'al día'}</span></div></div>
-    ${veredicto ? `<div class="sub" style="margin-top:8px">${veredicto}</div>` : ''}
-    <ul class="lista" style="margin-top:8px">${filas}</ul>
-    <div class="chico">Cuenta el promedio de la semana, nunca un solo día. Los días sin registro no entran al promedio.</div>`;
+  const suma = (k) => con.reduce((s, x) => s + x.r[k], 0);
+  const n = con.length, total = suma('kcal'), dif = total - meta * n;
+  return { lun, dias, n, total, dif, meta, metaP, pk: n ? Math.round(total / n) : 0, pp: n ? Math.round(suma('prot') / n) : 0 };
 }
+function veredictoSemana(s) {
+  if (!s.n || !s.meta) return null;
+  const porDia = Math.abs(s.pk - s.meta), tot = Math.abs(s.dif).toLocaleString('es-MX'), dias = `${s.n} ${s.n === 1 ? 'día completo' : 'días completos'}`;
+  if (s.pk > s.meta * 1.05) return { ok: false, t: `Vas ${tot} kcal por arriba de tu objetivo`, d: `En ${dias}. Son ${porDia.toLocaleString('es-MX')} kcal al día: ajusta una comida al día.` };
+  if (s.pk < s.meta * 0.8) return { ok: false, t: `Vas ${tot} kcal por debajo de tu objetivo`, d: `En ${dias}. Revisa si te faltó registrar algo; si no, come lo que marca tu plan.` };
+  return { ok: true, t: s.dif > 0 ? `Vas en tu objetivo, ${tot} kcal arriba` : s.dif < 0 ? `Vas en tu objetivo, ${tot} kcal por debajo` : 'Vas justo en tu objetivo', d: `En ${dias}. Bien ahí 💪` };
+}
+const nombreSemana = (s) => semanaOff === 0 ? 'Esta semana' : semanaOff === 1 ? 'Semana pasada' : `${fechaCorta(s.lun)} al ${fechaCorta(mas(s.lun, 6))}`;
+const hayAntes = (s) => semanaOff < 4 && s.lun > D.cliente.inicio;
+function pintarSemanaDias() {
+  const el = document.getElementById('semanaDias'); if (!el) return;
+  const s = datosSemana();
+  el.innerHTML = `<div class="semtop"><button class="chip" data-sem="1" ${hayAntes(s) ? '' : 'disabled'} aria-label="Semana anterior">‹</button><span>${esc(nombreSemana(s))}</span><button class="chip" data-sem="-1" ${semanaOff > 0 ? '' : 'disabled'} aria-label="Semana siguiente">›</button></div>
+    <div class="semdias">${s.dias.map((x, i) => `<button class="${x.f === fDia() ? 'sel' : ''}" data-verdia="${x.f}" ${x.futuro || x.antes ? 'disabled' : ''}><span>${'LMMJVSD'[i]}</span><b>${Number(x.f.slice(8))}</b><i class="${x.r.completo ? 'lleno' : x.r.hay ? 'medio' : ''}"></i></button>`).join('')}</div>`;
+}
+function pintarHistorial() {
+  const s = datosSemana(), v = veredictoSemana(s), num = (n) => n.toLocaleString('es-MX');
+  const nutri = document.getElementById('semanaNutri');
+  if (nutri) {
+    const a = datosSemana(0), w = veredictoSemana(a);
+    nutri.innerHTML = `<div class="card"><div class="etq">Tu promedio de la semana</div>${a.n ? `<div class="numero" style="margin-top:8px"><b>${num(a.pk)} <small>kcal al día${a.meta ? ' de ' + num(a.meta) : ''}</small></b></div>${w ? `<div class="sub" style="margin-top:6px;color:${w.ok ? 'var(--lima)' : 'var(--ambar)'}">${w.t}</div>` : ''}` : '<div class="sub" style="margin-top:6px">Marca tus 3 comidas de un día y aquí verás tu promedio.</div>'}<button class="btn borde" data-versemana="1">Ver mi semana</button></div>`;
+  }
+  const el = document.getElementById('historial'); if (!el) return;
+  const tope = Math.max(s.meta * 1.25, ...s.dias.map((x) => x.r.kcal), 1);
+  const faltan = s.dias.filter((x) => !x.futuro && !x.antes && x.f !== D.hoy && !x.r.completo);
+  el.innerHTML = `<div class="etq">${esc(nombreSemana(s))}</div>
+    ${s.n ? `<div class="numero" style="margin-top:8px"><div class="numtop"><span>Promedio al día</span>${s.meta ? `<span class="pct">${Math.round(s.pk / s.meta * 100)}%</span>` : ''}</div><b>${num(s.pk)} <small>kcal${s.meta ? ' de ' + num(s.meta) : ''}</small></b>
+      <div class="numpie">Proteína promedio: <b>${s.pp} g</b>${s.metaP ? ` de ${s.metaP} g` : ''}</div></div>
+      ${v ? `<div class="resultado on" style="margin-top:12px"><h3 style="color:${v.ok ? 'var(--lima)' : 'var(--ambar)'}">${v.t}</h3><p>${v.d}</p><p class="chico">Total: ${num(s.total)} de ${num(s.meta * s.n)} kcal.</p></div>` : ''}`
+      : '<div class="sub" style="margin-top:6px">Marca las 3 comidas de un día y aquí verás tu promedio contra tu objetivo.</div>'}
+    <div class="barras">${s.meta ? `<div class="linea" style="bottom:${26 + s.meta / tope * 96}px"><span>${num(s.meta)}</span></div>` : ''}${s.dias.map((x, i) => `<button data-verdia="${x.f}" ${x.futuro || x.antes ? 'disabled' : ''} aria-label="${esc(fechaLarga(x.f))}: ${x.r.hay ? x.r.kcal + ' kcal' : 'sin registro'}"><i class="${!x.r.completo ? 'medio' : s.meta && x.r.kcal > s.meta * 1.05 ? 'pasa' : ''}" style="height:${x.r.kcal ? Math.max(4, Math.round(x.r.kcal / tope * 96)) : 2}px"></i><span>${'LMMJVSD'[i]}</span></button>`).join('')}</div>
+    ${faltan.length ? `<div class="chico" style="margin-top:12px">Te faltó registrar. Toca el día para completarlo:</div><div class="chips">${faltan.map((x) => `<button class="chip" data-verdia="${x.f}">${esc(fechaLarga(x.f))} · ${x.r.marcadas} de 3</button>`).join('')}</div>` : ''}
+    <div class="chico" style="margin-top:10px">Cuenta el promedio de la semana, nunca un solo día. Solo entran los días con sus 3 comidas marcadas.</div>`;
+}
+// Tocar un día (tira de arriba, barras, pendientes) o cambiar de semana, en Mi día y en Nutrición.
+document.getElementById('main').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-verdia],[data-sem],[data-versemana]'); if (!b || b.disabled) return;
+  if (b.dataset.verdia) { verDia(b.dataset.verdia); activar('dia'); }
+  else if (b.dataset.sem) { semanaOff = Math.max(0, Math.min(4, semanaOff + Number(b.dataset.sem))); pintarSemanaDias(); pintarHistorial(); }
+  else { verDia(null); activar('dia'); document.getElementById('historial').scrollIntoView({ block: 'center' }); }
+});
 
 // ---------- Foto del plato: Haiku 5.5 estima y dice cuánto comer ----------
 function htmlFoto(nombre) {
@@ -1140,15 +1210,17 @@ function pedirFoto(nombre) {
   i.type = 'file'; i.accept = 'image/*';
   i.onchange = async () => {
     const archivo = i.files && i.files[0]; if (!archivo) return;
+    const dia = fDia();
     fotoRes[nombre] = { cargando: true }; pintarComidas();
     try {
-      const r = resumenDia(D.hoy), c = leerDia().c;
+      const r = resumenDia(dia), c = leerDia(dia).c;
       const faltan = Math.max(1, PRINCIPALES.filter((x) => !c[x] || !c[x].estado).length);
       const contexto = { faltan, meta: r.metaKcal ? `${r.metaKcal} kcal${r.metaProt ? ` y ${r.metaProt} g de proteína` : ''}` : '',
         restaKcal: r.metaKcal ? Math.max(0, r.metaKcal - r.kcal) : '', faltaProt: r.metaProt ? Math.max(0, r.metaProt - r.prot) : '' };
       const res = await nube('app_foto', { imagen: await achicarFoto(archivo), comida: nombre, contexto });
+      if (fDia() !== dia) return; // cambió de día mientras se leía la foto
       fotoRes[nombre] = { ...res.resultado, ok: !!res.resultado.es_comida };
-    } catch (e) { fotoRes[nombre] = { error: e.message }; }
+    } catch (e) { if (fDia() !== dia) return; fotoRes[nombre] = { error: e.message }; }
     pintarComidas();
   };
   i.click();
@@ -1537,12 +1609,12 @@ function conectar() {
     const b = e.target.closest('[data-mas],[data-menos]'); if (!b) return;
     const k = b.dataset.mas || b.dataset.menos;
     tragos[k] = Math.max(0, (tragos[k] || 0) + (b.dataset.mas ? 1 : -1));
-    guardarJ(claveTragos(), tragos);
+    guardarJ(claveTragos(fDia()), tragos);
     pintarAlcohol();
     pintarDia();
   });
   Object.keys(tragos).forEach((k) => delete tragos[k]);
-  Object.assign(tragos, leerJ(claveTragos(), {}));
+  Object.assign(tragos, leerJ(claveTragos(fDia()), {}));
   pintarAlcohol();
   conectarDia();
   conectarMenu();
