@@ -351,7 +351,7 @@ function vistaHoy(c) {
   const p = proximaSesion(c);
   const manana = p && p.f === mas(D.hoy, 1) ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="color:var(--texto);font-size:16px;font-weight:600;margin-top:4px">${esc(p.s.nombre)}${p.cardio ? '' : ` · ${esc(EQUIPO[PLAN_A_EQUIPO[p.s.plan] || 'gym'].txt)}`}</div><div class="chico" style="margin-top:4px">Deja lista tu ropa desde la noche anterior.</div></div>`
     : p ? `<div class="card"><div class="etq">Mañana</div><div class="sub" style="margin-top:4px">Día de descanso. Tu siguiente sesión es ${esc(p.s.nombre)}, el ${DIAS[new Date(p.f + 'T12:00').getDay()]}.</div></div>` : '';
-  return `<section data-v="hoy">${hero}<div id="listaHoy"></div><div id="correrAviso"></div>${sem}${manana}
+  return `<section data-v="hoy">${hero}<div id="listaHoy"></div><div id="avisoCel"></div><div id="correrAviso"></div>${sem}${manana}
     <h2>¿Se complicó tu día?</h2>
     <div class="card" id="arbol" data-sesion="${esc(sesionTxt)}" data-equipo="${equipoBase}">
       <div class="sub">El plan cambia el equipo y el tiempo, nunca la sesión. Responde dos preguntas:</div>
@@ -440,6 +440,68 @@ function conectarLista() {
     pintarLista();
   });
   pintarLista();
+  pintarAvisoCel();
+}
+
+// ---------- RECORDATORIO EN EL CALENDARIO DEL CELULAR (23 nov 2026, ok de Angel) ----------
+// Un aviso al día a la hora que elija: pesarse y la sesión que toca, más un evento por cada día de fotos. Hasta el fin del programa.
+// Privado y como "disponible" para no ocupar su agenda de trabajo. Con UID fijo: si lo vuelve a agregar, reemplaza al anterior.
+const claveHoraAviso = () => `asf-hora-${D.cliente.id}`;
+function linksRecordatorio(hora) {
+  const c = D.cliente, fin = finPrograma(), desde = D.hoy > c.inicio ? D.hoy : c.inicio;
+  const H = hora.replace(':', '') + '00', dia = (f) => f.replace(/-/g, '');
+  const [hh, mm] = hora.split(':').map(Number), m2 = Math.min(hh * 60 + mm + 15, 1439);
+  const H2 = String(Math.floor(m2 / 60)).padStart(2, '0') + String(m2 % 60).padStart(2, '0') + '00';
+  const COD = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'], NOM = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const semana = D.extra.semana || null;
+  const corto = (s) => (/cardio|running/i.test(s) ? 'Cardio' : s.replace(/\s*·.*$/, '').replace(/^Tren\s+/i, ''));
+  const diarios = [];
+  for (let i = 0; i < 7; i++) {
+    const f = mas(desde, i); if (f > fin) break;
+    const w = new Date(f + 'T12:00:00').getDay();
+    const titulo = !semana ? 'Pésate y revisa tu sesión de hoy' : semana[w] ? `Pésate · Hoy te toca ${corto(semana[w])}` : 'Pésate · Hoy descansas';
+    diarios.push({ f, titulo, cod: COD[w] });
+  }
+  const fotos = (c.hitos || []).map(([n]) => mas(c.inicio, n - 1)).filter((f) => f >= D.hoy && f <= fin); // las iniciales se toman en el Diagnóstico
+  const det = 'Al despertar, en ayunas. Regístralo en Trainerize y revisa tu lista del día en tu app ASF.';
+  const detF = 'Súbelas en Trainerize, antes de tu sesión con Angel.';
+  const e = (s) => s.replace(/([,;\\])/g, '\\$1');
+  const sello = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  const alarma = (cuando, txt) => ['BEGIN:VALARM', 'TRIGGER:' + cuando, 'ACTION:DISPLAY', 'DESCRIPTION:' + e(txt), 'END:VALARM'];
+  const evento = (uid, f, titulo, desc, regla, alarmas) => ['BEGIN:VEVENT', `UID:${uid}-${c.id}@asftraining`, 'DTSTAMP:' + sello, 'SEQUENCE:' + Math.floor(Date.now() / 60000),
+    `DTSTART:${dia(f)}T${H}`, `DTEND:${dia(f)}T${H2}`, ...(regla ? ['RRULE:' + regla] : []), 'SUMMARY:' + e(titulo), 'DESCRIPTION:' + e(desc),
+    'CLASS:PRIVATE', 'TRANSP:TRANSPARENT', ...alarmas, 'END:VEVENT'];
+  const lineas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ASF Training//App//ES',
+    ...diarios.flatMap((g) => evento('diario-' + g.cod, g.f, g.titulo, det, `FREQ=WEEKLY;BYDAY=${g.cod};UNTIL=${dia(fin)}T235959`, alarma('PT0S', g.titulo))),
+    ...fotos.flatMap((f) => evento('fotos-' + dia(f), f, 'Hoy te tocan tus fotos', detF, '', [...alarma('PT0S', 'Hoy te tocan tus fotos'), ...alarma('-PT12H', 'Mañana te tocan tus fotos')])),
+    'END:VCALENDAR'];
+  // iCalendar pide líneas de máximo 75 bytes: las largas siguen en la siguiente con un espacio.
+  const ics = lineas.map((l) => { const o = []; let x = ''; for (const ch of l) { if (new TextEncoder().encode(x + ch).length > 72) { o.push(x); x = ' '; } x += ch; } o.push(x); return o.join('\r\n'); }).join('\r\n') + '\r\n';
+  const zona = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City';
+  const google = (f, titulo, desc, regla) => `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dia(f)}T${H}/${dia(f)}T${H2}&ctz=${encodeURIComponent(zona)}&trp=false&details=${encodeURIComponent(desc)}${regla ? '&recur=' + encodeURIComponent('RRULE:' + regla) : ''}`;
+  const txtSemana = semana ? '\n\nTu semana:\n' + [1, 2, 3, 4, 5, 6, 0].map((w) => `${NOM[w]}: ${semana[w] ? corto(semana[w]) : 'descanso'}`).join('\n') : '';
+  return {
+    ics: 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics), texto: ics,
+    g: google(desde, 'Pésate y revisa tu sesión de hoy', det + txtSemana, `FREQ=DAILY;UNTIL=${dia(mas(fin, 1))}T055959Z`),
+    fotos: fotos.map((f) => [f, google(f, 'Hoy te tocan tus fotos', detF, '')])
+  };
+}
+function pintarAvisoCel() {
+  const el = document.getElementById('avisoCel'); if (!el) return;
+  if (D.hoy >= finPrograma()) { el.innerHTML = ''; return; }
+  const hora = /^\d\d:\d\d$/.test(lee(claveHoraAviso()) || '') ? lee(claveHoraAviso()) : '07:00';
+  const abierto = !!el.querySelector('details[open]');
+  const k = linksRecordatorio(hora);
+  el.innerHTML = `<details${abierto ? ' open' : ''}><summary><b>Que te avise tu celular</b></summary><div style="padding:0 16px 18px">
+    <div class="sub">Un aviso al día en tu calendario: pesarte, la sesión que te toca y tus días de fotos. Termina solo con tu programa.</div>
+    <label class="chico" style="display:flex;align-items:center;gap:10px;margin-top:12px">A qué hora te levantas <input type="time" id="horaAviso" value="${hora}" style="width:auto;margin:0;padding:8px 10px;border-radius:10px;border:1px solid var(--linea,#333);background:transparent;color:var(--texto);font:inherit;font-size:16px;color-scheme:dark"></label>
+    <a class="btn lima" style="margin-top:12px" href="${k.ics}" download="recordatorios-asf.ics">iPhone u Outlook</a>
+    <div class="chico" style="margin-top:6px">Ábrelo y elige "Agregar todos".</div>
+    <a class="btn borde" href="${k.g}" target="_blank" rel="noopener">Google Calendar (Android)</a>
+    <div class="chico" style="margin-top:6px">Dale Guardar y déjale su notificación.${k.fotos.length ? ' Tus días de fotos se agregan aparte:' : ''}</div>
+    ${k.fotos.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${k.fotos.map(([f, u]) => `<a class="chip" style="text-decoration:none" href="${u}" target="_blank" rel="noopener">${esc(fechaCorta(f))}</a>`).join('')}</div>` : ''}
+  </div></details>`;
+  document.getElementById('horaAviso').addEventListener('change', (ev) => { if (ev.target.value) { guarda(claveHoraAviso(), ev.target.value); pintarAvisoCel(); } });
 }
 
 function resolverArbol() {
