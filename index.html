@@ -1258,7 +1258,9 @@ function pedirFoto(nombre) {
 const COCINA = ['Sartén', 'Horno', 'Microondas', 'Freidora de aire'];
 const VECES = [4, 3]; // en 7 días: Día A lun, mié, vie, dom · Día B mar, jue, sáb
 const DIAS_MENU = ['lunes, miércoles, viernes y domingo', 'martes, jueves y sábado'];
-const ICO_COMIDA = (n) => (/desayuno/i.test(n) ? '🍳' : /colaci|snack/i.test(n) ? '🍎' : /cena/i.test(n) ? '🌙' : '🍽️');
+// La IA a veces repite los días en el nombre ("Día A (lunes...)"): aquí se quita, los días ya salen aparte.
+const nomDiaMenu = (d, i) => String(d.nombre || '').replace(/\s*[(:·-].*$/, '').trim() || `Día ${'AB'[i] || i + 1}`;
+const ICO_COMIDA =(n) => (/desayuno/i.test(n) ? '🍳' : /colaci|snack/i.test(n) ? '🍎' : /cena/i.test(n) ? '🌙' : '🍽️');
 const numTxt = (n) => (Math.round(n * 100) / 100).toLocaleString('es-MX');
 function cantTxt(n, u) {
   if (u === 'al gusto' || !(n > 0)) return 'al gusto';
@@ -1289,7 +1291,7 @@ const textoLista = (m) => ['LISTA DEL SÚPER', paraTxt(m), '', ...listaSuper(m).
 function renglonesMenu(x) {
   const m = x.menu, r = [['t', 'Mi menú · ASF Training'], ['p', `${D.cliente.nombre} · ${x.fecha ? fechaCorta(x.fecha) : ''} · ${numTxt(x.kcal || D.extra.kcal)} kcal y ${x.proteina || D.extra.proteina} g de proteína al día`]];
   (m.dias || []).forEach((d, i) => {
-    r.push(['h', `${d.nombre} · ${numTxt(d.kcal)} kcal · ${d.proteina} g de proteína`], ['p', cap(DIAS_MENU[i] || '')]);
+    r.push(['h', `${nomDiaMenu(d, i)} · ${numTxt(d.kcal)} kcal · ${d.proteina} g de proteína`], ['p', cap(DIAS_MENU[i] || '')]);
     d.comidas.forEach((c) => { r.push(['b', `${c.comida}: ${c.platillo} (${c.kcal} kcal · ${c.proteina} g)`]); (c.ingredientes || []).forEach((g) => r.push(['p', '   • ' + ingTxt(g)])); });
   });
   r.push(['h', 'Lista del súper'], ['p', paraTxt(m)]); listaSuper(m).forEach((l) => r.push(['p', '   [  ] ' + (l.t || `${l.n}: ${l.c}`)]));
@@ -1389,7 +1391,7 @@ function pintarMenu() {
   const lista = listaSuper(m);
   el.innerHTML = `<h2>Tu menú</h2>
     ${NUBE_MENUS.length > 1 ? `<div class="chips" style="margin:0 0 12px">${NUBE_MENUS.map((x, k) => `<button class="chip${mismoMenu(x, NUBE_MENU) ? ' on' : ''}" data-vermenu="${k}">${k === 0 ? 'El más nuevo' : 'Anterior ' + k}${x.fecha ? ' · ' + esc(fechaCorta(x.fecha)) : ''}</button>`).join('')}</div>` : ''}
-    <div class="seg">${dias.map((x, k) => `<button class="${k === i ? 'on' : ''}" data-menudia="${k}"><b>${esc(x.nombre)}</b><span>${k === 0 ? 'L · M · V · D' : 'M · J · S'}</span></button>`).join('')}</div>
+    <div class="seg">${dias.map((x, k) => `<button class="${k === i ? 'on' : ''}" data-menudia="${k}"><b>${esc(nomDiaMenu(x, k))}</b><span>${k === 0 ? 'L · M · V · D' : 'M · J · S'}</span></button>`).join('')}</div>
     <div class="card"><div class="dosnum"><div><b>${numTxt(d.kcal)}</b><span>kcal</span></div><div class="prot"><b>${esc(d.proteina)} g</b><span>proteína</span></div></div>
       <div class="chico" style="text-align:center">${esc(cap(DIAS_MENU[i] || ''))}</div></div>
     ${d.comidas.map((c) => `<div class="card comida"><div class="cab"><span class="ico">${ICO_COMIDA(c.comida)}</span><div><span class="chico">${esc(c.comida)}</span><b>${esc(c.platillo)}</b></div></div>
