@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = '4b63af728e33', VERSION_TXT = '23 nov, 01:37'; // los pone publicar-app.js
+const VERSION = '5fe3bbee87e4', VERSION_TXT = '24 nov, 10:02'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -698,7 +698,7 @@ function vistaComida() {
     ? `<div class="dosnum"><div><b>${esc(Number(x.kcal).toLocaleString('es-MX'))}</b><span>kcal al día</span></div>${x.proteina ? `<div class="prot"><b>${esc(x.proteina)} g</b><span>proteína al día</span></div>` : ''}</div>`
     :'<div class="sub">Tus números base (calorías y proteína) se cargarán aquí en tu siguiente ajuste. Mientras tanto, consulta tu PDF de Números Base.</div>';
   // Reparto por comida y ejemplos de proteína: del PDF de Números Base del cliente (datos/app.json).
-  const reparto = (x.comidas || []).length ? `<h2>Tu día, comida por comida</h2><div class="card"><ul class="lista">${x.comidas.map((m) => `<li><span><b>${esc(m.n)}</b></span><span class="ok">${esc(m.kcal)} kcal · ${esc(m.prot)} g prot</span></li>`).join('')}</ul>
+  const reparto = (x.comidas || []).length ? `<h2>Tu día, comida por comida</h2><div class="card"><ul class="lista">${x.comidas.map((m) => `<li><span><b>${esc(m.n)}</b>${m.plato ? `<br>${esc(m.plato)}<br><span class="chico">${esc(m.detalle || '')}</span>` : ''}</span><span class="ok"${m.plato ? ' style="flex:none;text-align:right"' : ''}>${esc(m.kcal)} kcal · ${esc(m.prot)} g prot</span></li>`).join('')}</ul>
       ${(x.ejemplosProteina || []).length ? `<div class="etq" style="margin-top:14px">Cómo llegar a tu proteína en una comida</div><ul class="lista" style="margin-top:4px">${x.ejemplosProteina.map(([a, g]) => `<li><span>${esc(a)}</span><span class="chico">${esc(g)}</span></li>`).join('')}</ul>` : ''}</div>` : '';
   const importante = (x.importante || []).length ? `<div class="card"><div class="etq">Lo más importante</div><ul class="lista" style="margin-top:4px">${x.importante.map((t) => `<li><span>✓ ${esc(t)}</span></li>`).join('')}</ul></div>` : '';
   const frases = [
@@ -934,7 +934,12 @@ function htmlComida(nombre, c) {
   return `<div class="card reg ${est || ''}" data-comida="${nombre}">
     <div class="cab"><span class="icob">${ICO_COMIDA(nombre)}</span><b>${nombre}</b>
       <span class="der">${est === 'no' ? '<span class="x">No la hice</span>' : est ? `<span class="k">${t.kcal.toLocaleString('es-MX')} kcal</span><span class="p">${t.prot} g prot</span>` : '<span class="x">Pendiente</span>'}</span></div>
-    ${chips}${detalle}</div>`;
+    ${textoPlan(nombre)}${chips}${detalle}</div>`;
+}
+// Platillo fijo de esa comida, si el cliente lo tiene (datos/app.json → comidas: plato y detalle; 24 nov 2026, cuenta de Angel).
+function textoPlan(nombre) {
+  const m = (D.extra.comidas || []).find((c) => c.n === nombre);
+  return m && m.plato ? `<div class="sub" style="margin-top:8px"><b>${esc(m.plato)}</b><br>${esc(m.detalle || '')}</div>` : '';
 }
 
 function selector(nombre, c) {
@@ -961,7 +966,7 @@ function filtrar(nombre) {
 function pintarComidas() {
   const el = document.getElementById('diaComidas'); if (!el) return;
   const d = leerDia();
-  el.innerHTML = COMIDAS.map((n) => htmlComida(n, d.c[n])).join('');
+  el.innerHTML = COMIDAS.filter((n) => !(n === 'Colación' && D.extra.sinColacion && !(d.c[n] && d.c[n].estado))).map((n) => htmlComida(n, d.c[n])).join('');
   if (editando) filtrar(editando);
 }
 
