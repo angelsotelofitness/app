@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = '3427da0727a2', VERSION_TXT = '25 nov, 15:51'; // los pone publicar-app.js
+const VERSION = 'daf82b0b2aa5', VERSION_TXT = '25 nov, 15:57'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -939,20 +939,20 @@ function cajaTexto(nombre, est) {
   const t = textos[nombre] || {};
   const titulo = est === 'plan' ? 'Comiste algo de más?' : esExtra(nombre) ? 'Comiste algo entre comidas?' : 'Qué comiste?';
   return `<div class="campo" style="margin-top:12px">${titulo}</div>
-    <div class="chico" style="margin-top:4px">Pon cuánto de cada cosa: piezas, tazas, gramos, ml o porciones.</div>
-    <textarea class="buscar" data-texto="${nombre}" rows="3" maxlength="400" placeholder="${est === 'plan' || esExtra(nombre) ? 'Ej. 15 avellanas, 1 taza de papaya y 1 café con leche de 240 ml' : 'Ej. 150 g de pollo asado, 1 taza de arroz, 2 tortillas de maíz y 500 ml de agua de jamaica'}" style="margin-top:6px;resize:vertical;font-size:16px" ${t.cargando ? 'disabled' : ''}>${esc(t.v || '')}</textarea>
+    <div class="chico" style="margin-top:4px">Pon cuánto: piezas, tazas o vasos.</div>
+    <textarea class="buscar" data-texto="${nombre}" rows="2" maxlength="400" placeholder="${est === 'plan' || esExtra(nombre) ? 'Ej. 15 avellanas y 1 taza de papaya' : 'Ej. 3 tacos de pastor y 1 vaso de agua de jamaica'}" style="margin-top:6px;resize:vertical;font-size:16px" ${t.cargando ? 'disabled' : ''}>${esc(t.v || '')}</textarea>
     ${t.error ? `<div class="avisoerr">${esc(t.error)}</div>` : ''}${t.ok ? `<div class="chico ok" style="margin-top:6px">${esc(t.ok)}</div>` : ''}
     <button class="btn lima" data-textoenviar="${nombre}" data-c="${nombre}" style="margin-top:8px" ${t.cargando ? 'disabled' : ''}>${t.cargando ? 'Calculando…' : 'Registrar lo que escribí'}</button>`;
 }
 async function enviarTexto(nombre) {
   const t = textos[nombre] = textos[nombre] || {}, escrito = (t.v || '').trim(), dia = fDia();
   if (t.cargando) return;
-  if (!escrito) { t.error = 'Escribe qué comiste y cuánto. Ej. 15 avellanas, 1 taza de papaya.'; return pintarComidas(); }
+  if (!escrito) { t.error = 'Escribe qué comiste y cuánto. Ej. 15 avellanas.'; return pintarComidas(); }
   t.cargando = true; t.error = t.ok = ''; pintarComidas();
   try {
     const r = await nube('app_texto', { texto: escrito, comida: nombre });
     const nuevos = (r.alimentos || []).map((a) => ({ n: a.nombre, kcal: Math.round(a.kcal), prot: Math.round(a.proteina), t: 1 }));
-    if (!nuevos.length) throw new Error('No encontré alimentos. Escribe qué comiste y cuánto. Ej. 15 avellanas, 1 taza de papaya.');
+    if (!nuevos.length) throw new Error('No encontré alimentos. Escribe qué comiste y cuánto. Ej. 15 avellanas.');
     const d = leerDia(dia), c = d.c[nombre] = d.c[nombre] || {}; // se lee otra vez: pudo cambiar mientras calculaba
     if (c.estado === 'plan') c.extras = (c.extras || []).concat(nuevos);
     else { c.estado = 'fuera'; c.otros = (c.otros || []).concat(nuevos); }
