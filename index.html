@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = 'fb8bb20f77e7', VERSION_TXT = '25 nov, 15:26'; // los pone publicar-app.js
+const VERSION = '07117e5fa95e', VERSION_TXT = '25 nov, 15:31'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -499,7 +499,7 @@ function pintarLista() {
   const est = (ok) => `<span class="chico" style="flex:none;font-weight:700;${ok ? 'color:var(--lima)' : ''}">${ok ? 'Hecho' : 'Pendiente'}</span>`;
 
   // Lo que él marca
-  const nc = PRINCIPALES.filter((n) => d.c[n] && d.c[n].estado).length, np = PRINCIPALES.length, r = resumenDia(D.hoy);
+  const nc = comidasPlan().filter((n) => d.c[n] && d.c[n].estado).length, np = comidasPlan().length, r = resumenDia(D.hoy);
   const hayMenu = !!(NUBE_MENU && NUBE_MENU.menu);
   const mias = [
     fila('🍽️', nc === np, 'Registra tus comidas', nc === np ? 'Listas las de hoy' : `${nc} de ${np} hoy`, ir('dia', nc === np ? 'Ver' : 'Registrar', nc < np)),
@@ -864,8 +864,20 @@ const sinAcentos = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u03
 // Pestaña "Mi día" (9 nov 2026, pedido de Angel): solo el registro del día.
 // Cada comida se marca "Del plan" (cuenta lo de su plan) o "Fuera del plan" (se detalla qué comió).
 // Las comidas que faltan son las que aún no marca; con eso la app reparte lo que le queda.
-const COMIDAS = ['Desayuno', 'Comida', 'Cena', 'Colación'];
-const PRINCIPALES = ['Desayuno', 'Comida', 'Cena'];
+// Las comidas de Mi día son las de su plan (25 nov 2026, pedido de Angel): de 2 a 5, con el mismo nombre. Lo que coma aparte va en
+// "Entre comidas" (clave 'Colación'), que no tiene "Del plan" porque no está en el plan. Si su plan ya trae colación, no hay "Entre comidas".
+const EXTRA = 'Colación';
+const comidasPlan = () => { const l = ((D && D.extra && D.extra.comidas) || []).map((c) => c.n); return l.length ? l : ['Desayuno', 'Comida', 'Cena']; };
+const enPlan = (n) => comidasPlan().includes(n);
+const esExtra = (n) => n === EXTRA && !enPlan(n);
+const nomComida = (n) => (esExtra(n) ? 'Entre comidas' : n);
+// c = lo registrado ese día: una comida de un plan anterior que sí registró no se pierde.
+function comidasDia(c = {}) {
+  const l = comidasPlan().slice();
+  if (!l.some((n) => /colaci/i.test(n))) l.push(EXTRA);
+  Object.keys(c).forEach((n) => { if (!l.includes(n) && c[n] && c[n].estado) l.push(n); });
+  return l;
+}
 // Mi día puede abrir un día anterior para completarlo (23 nov 2026, pedido de Angel). null = hoy.
 let diaReg = null, semanaOff = 0;
 const fDia = () => diaReg || D.hoy;
@@ -925,9 +937,9 @@ const textos = {}; // por comida: { v: lo escrito, cargando, error, ok }
 function cajaTexto(nombre, est) {
   if (!hayTexto()) return '';
   const t = textos[nombre] || {};
-  const titulo = est === 'plan' ? 'Comiste algo de más?' : nombre === 'Colación' ? 'Comiste algo entre comidas?' : 'Qué comiste?';
+  const titulo = est === 'plan' ? 'Comiste algo de más?' : esExtra(nombre) ? 'Comiste algo entre comidas?' : 'Qué comiste?';
   return `<div class="campo" style="margin-top:12px">${titulo}</div>
-    <textarea class="buscar" data-texto="${nombre}" rows="2" maxlength="400" placeholder="${est === 'plan' || nombre === 'Colación' ? 'Ej. 15 avellanas y un café con leche' : 'Ej. 3 tacos de pastor y un agua de jamaica'}" style="margin-top:6px;resize:vertical;font-size:16px" ${t.cargando ? 'disabled' : ''}>${esc(t.v || '')}</textarea>
+    <textarea class="buscar" data-texto="${nombre}" rows="2" maxlength="400" placeholder="${est === 'plan' || esExtra(nombre) ? 'Ej. 15 avellanas y un café con leche' : 'Ej. 3 tacos de pastor y un agua de jamaica'}" style="margin-top:6px;resize:vertical;font-size:16px" ${t.cargando ? 'disabled' : ''}>${esc(t.v || '')}</textarea>
     ${t.error ? `<div class="avisoerr">${esc(t.error)}</div>` : ''}${t.ok ? `<div class="chico ok" style="margin-top:6px">${esc(t.ok)}</div>` : ''}
     <button class="btn lima" data-textoenviar="${nombre}" data-c="${nombre}" style="margin-top:8px" ${t.cargando ? 'disabled' : ''}>${t.cargando ? 'Calculando…' : 'Registrar lo que escribí'}</button>`;
 }
@@ -956,14 +968,13 @@ async function enviarTexto(nombre) {
 
 function htmlComida(nombre, c) {
   const t = totalComida(c, nombre), est = c && c.estado;
-  const conMeta = Number(D.extra.kcal) > 0;
   const chips = `<div class="chips" style="margin-top:8px">
-      ${conMeta || nombre !== 'Colación' ? `<button class="chip${est === 'plan' ? ' on' : ''}" data-estado="plan" data-c="${nombre}">Del plan</button>` : ''}
-      <button class="chip${est === 'fuera' ? ' on' : ''}" data-estado="fuera" data-c="${nombre}">${nombre === 'Colación' ? 'Registrar' : 'Fuera del plan'}</button>
-      ${nombre !== 'Colación' ? `<button class="chip${est === 'no' ? ' on' : ''}" data-estado="no" data-c="${nombre}">No la hice</button>` : ''}
+      ${enPlan(nombre) ? `<button class="chip${est === 'plan' ? ' on' : ''}" data-estado="plan" data-c="${nombre}">Del plan</button>` : ''}
+      <button class="chip${est === 'fuera' ? ' on' : ''}" data-estado="fuera" data-c="${nombre}">${enPlan(nombre) ? 'Fuera del plan' : 'Registrar'}</button>
+      ${enPlan(nombre) ? `<button class="chip${est === 'no' ? ' on' : ''}" data-estado="no" data-c="${nombre}">No la hice</button>` : ''}
       ${hayNube() ? `<button class="chip" data-foto="${nombre}">📷 Foto</button>` : ''}</div>${htmlFoto(nombre)}`;
   let detalle = '';
-  if (est === 'plan' || (nombre === 'Colación' && !est)) {
+  if (est === 'plan' || (esExtra(nombre) && !est)) {
     const l = est === 'plan' ? (c.extras || []) : [];
     detalle = `${l.length ? `<ul class="lista" style="margin-top:8px">${l.map((o, i) => lineaOtro(nombre, o, i, 'quitarx')).join('')}</ul>` : ''}${cajaTexto(nombre, est)}`;
   }
@@ -975,9 +986,9 @@ function htmlComida(nombre, c) {
       ${cajaTexto(nombre, est)}${editando === nombre ? selector(nombre, c) : `<button class="btn borde" data-editar="${nombre}" style="margin-top:10px">${hayTexto() ? 'Buscar en la lista' : lineas.length ? 'Agregar o cambiar' : 'Agregar lo que comí'}</button>`}`;
   }
   return `<div class="card reg ${est || ''}" data-comida="${nombre}">
-    <div class="cab"><span class="icob">${ICO_COMIDA(nombre)}</span><b>${nombre}</b>
-      <span class="der">${est === 'no' ? '<span class="x">No la hice</span>' : est ? `<span class="k">${t.kcal.toLocaleString('es-MX')} kcal</span><span class="p">${t.prot} g prot</span>` : '<span class="x">Pendiente</span>'}</span></div>
-    ${textoPlan(nombre)}${chips}${detalle}</div>`;
+    <div class="cab"><span class="icob">${ICO_COMIDA(nombre)}</span><b>${nomComida(nombre)}</b>
+      <span class="der">${est === 'no' ? '<span class="x">No la hice</span>' : est && (enPlan(nombre) || t.kcal) ? `<span class="k">${t.kcal.toLocaleString('es-MX')} kcal</span><span class="p">${t.prot} g prot</span>` : enPlan(nombre) ? '<span class="x">Pendiente</span>' : ''}</span></div>
+    ${esExtra(nombre) ? '<div class="chico" style="margin-top:6px">No es parte de tu plan. Úsalo solo si comiste algo más.</div>' : ''}${textoPlan(nombre)}${chips}${detalle}</div>`;
 }
 // Platillo fijo de esa comida, si el cliente lo tiene (datos/app.json → comidas: plato y detalle; 24 nov 2026, cuenta de Angel).
 function textoPlan(nombre) {
@@ -1009,7 +1020,7 @@ function filtrar(nombre) {
 function pintarComidas() {
   const el = document.getElementById('diaComidas'); if (!el) return;
   const d = leerDia();
-  el.innerHTML = COMIDAS.filter((n) => !(n === 'Colación' && D.extra.sinColacion && !(d.c[n] && d.c[n].estado))).map((n) => htmlComida(n, d.c[n])).join('');
+  el.innerHTML = comidasDia(d.c).filter((n) => !(esExtra(n) && D.extra.sinColacion && !(d.c[n] && d.c[n].estado))).map((n) => htmlComida(n, d.c[n])).join('');
   if (editando) filtrar(editando);
 }
 
@@ -1017,10 +1028,10 @@ function pintarDia() {
   const el = document.getElementById('diaResumen'); if (!el) return;
   const x = D.extra, d = leerDia(), t = leerJ(claveTragos(fDia()), {});
   let kcal = 0, prot = 0;
-  COMIDAS.forEach((n) => { const v = totalComida(d.c[n], n); kcal += v.kcal; prot += v.prot; });
+  comidasDia(d.c).forEach((n) => { const v = totalComida(d.c[n], n); kcal += v.kcal; prot += v.prot; });
   kcal += BEBIDAS.reduce((s, [k, , , c]) => s + (t[k] || 0) * c, 0);
   const vacia = (c) => !c || !c.estado || (c.estado === 'fuera' && !Object.keys(c.items || {}).length && !(c.otros || []).length);
-  const faltan = PRINCIPALES.filter((n) => vacia(d.c[n])).length;
+  const faltan = comidasPlan().filter((n) => vacia(d.c[n])).length;
   const meta = Number(x.kcal) || 0, metaP = Number(x.proteina) || 0;
   const num = (n) => n.toLocaleString('es-MX');
   const numero = (nombre, v, m, u, quedan, faltanTxt) => {
@@ -1174,10 +1185,10 @@ function estadoNube(ok) {
 function resumenDia(f) {
   const c = leerJ(claveDia(f), {}).c || {}, t = leerJ(claveTragos(f), {});
   let kcal = 0, prot = 0, delPlan = 0, fuera = 0, tr = 0;
-  COMIDAS.forEach((n) => { const x = c[n]; if (!x || !x.estado) return; const v = totalComida(x, n); kcal += v.kcal; prot += v.prot; if (x.estado === 'plan') delPlan++; else if (x.estado === 'fuera') fuera++; });
-  const marcadas = PRINCIPALES.filter((n) => c[n] && c[n].estado).length;
+  comidasDia(c).forEach((n) => { const x = c[n]; if (!x || !x.estado) return; const v = totalComida(x, n); kcal += v.kcal; prot += v.prot; if (x.estado === 'plan') delPlan++; else if (x.estado === 'fuera') fuera++; });
+  const marcadas = comidasPlan().filter((n) => c[n] && c[n].estado).length;
   BEBIDAS.forEach(([k, , , cal]) => { kcal += (t[k] || 0) * cal; if (k !== 'mezclador') tr += t[k] || 0; });
-  return { kcal, prot, delPlan, fuera, tragos: tr, metaKcal: Number(D.extra.kcal) || 0, metaProt: Number(D.extra.proteina) || 0, marcadas, completo: marcadas === PRINCIPALES.length, hay: delPlan + fuera + tr + marcadas > 0 };
+  return { kcal, prot, delPlan, fuera, tragos: tr, metaKcal: Number(D.extra.kcal) || 0, metaProt: Number(D.extra.proteina) || 0, marcadas, completo: marcadas === comidasPlan().length, hay: delPlan + fuera + tr + marcadas > 0 };
 }
 
 function marcarCambio(f) {
@@ -1265,7 +1276,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 });
 
 // ---------- Tu semana (23 nov 2026, pedido de Angel): promedio y total contra su objetivo; se toca un día para completarlo ----------
-// Al promedio solo entran los días con sus 3 comidas marcadas: un día a medias bajaría el promedio sin ser cierto.
+// Al promedio solo entran los días con todas las comidas de su plan marcadas: un día a medias bajaría el promedio sin ser cierto.
 // La nube guarda a la mano 35 días (App.gs), por eso se puede regresar hasta 4 semanas.
 function datosSemana(off = semanaOff) {
   const lun = mas(lunesDe(D.hoy), -7 * off);
@@ -1296,7 +1307,7 @@ function pintarHistorial() {
   const nutri = document.getElementById('semanaNutri');
   if (nutri) {
     const a = datosSemana(0), w = veredictoSemana(a);
-    nutri.innerHTML = `<div class="card"><div class="etq">Tu promedio de la semana</div>${a.n ? `<div class="numero" style="margin-top:8px"><b>${num(a.pk)} <small>kcal al día${a.meta ? ' de ' + num(a.meta) : ''}</small></b></div>${w ? `<div class="sub" style="margin-top:6px;color:${w.ok ? 'var(--lima)' : 'var(--ambar)'}">${w.t}</div>` : ''}` : '<div class="sub" style="margin-top:6px">Marca tus 3 comidas de un día y aquí verás tu promedio.</div>'}<button class="btn borde" data-versemana="1">Ver mi semana</button></div>`;
+    nutri.innerHTML = `<div class="card"><div class="etq">Tu promedio de la semana</div>${a.n ? `<div class="numero" style="margin-top:8px"><b>${num(a.pk)} <small>kcal al día${a.meta ? ' de ' + num(a.meta) : ''}</small></b></div>${w ? `<div class="sub" style="margin-top:6px;color:${w.ok ? 'var(--lima)' : 'var(--ambar)'}">${w.t}</div>` : ''}` : '<div class="sub" style="margin-top:6px">Marca todas tus comidas de un día y aquí verás tu promedio.</div>'}<button class="btn borde" data-versemana="1">Ver mi semana</button></div>`;
   }
   const el = document.getElementById('historial'); if (!el) return;
   const tope = Math.max(s.meta * 1.25, ...s.dias.map((x) => x.r.kcal), 1);
@@ -1305,10 +1316,10 @@ function pintarHistorial() {
     ${s.n ? `<div class="numero" style="margin-top:8px"><div class="numtop"><span>Promedio al día</span>${s.meta ? `<span class="pct">${Math.round(s.pk / s.meta * 100)}%</span>` : ''}</div><b>${num(s.pk)} <small>kcal${s.meta ? ' de ' + num(s.meta) : ''}</small></b>
       <div class="numpie">Proteína promedio: <b>${s.pp} g</b>${s.metaP ? ` de ${s.metaP} g` : ''}</div></div>
       ${v ? `<div class="resultado on" style="margin-top:12px"><h3 style="color:${v.ok ? 'var(--lima)' : 'var(--ambar)'}">${v.t}</h3><p>${v.d}</p><p class="chico">Total: ${num(s.total)} de ${num(s.meta * s.n)} kcal.</p></div>` : ''}`
-      : '<div class="sub" style="margin-top:6px">Marca las 3 comidas de un día y aquí verás tu promedio contra tu objetivo.</div>'}
+      : '<div class="sub" style="margin-top:6px">Marca todas tus comidas de un día y aquí verás tu promedio contra tu objetivo.</div>'}
     <div class="barras">${s.meta ? `<div class="linea" style="bottom:${26 + s.meta / tope * 96}px"><span>${num(s.meta)}</span></div>` : ''}${s.dias.map((x, i) => `<button data-verdia="${x.f}" ${x.futuro || x.antes ? 'disabled' : ''} aria-label="${esc(fechaLarga(x.f))}: ${x.r.hay ? x.r.kcal + ' kcal' : 'sin registro'}"><i class="${!x.r.completo ? 'medio' : s.meta && x.r.kcal > s.meta * 1.05 ? 'pasa' : ''}" style="height:${x.r.kcal ? Math.max(4, Math.round(x.r.kcal / tope * 96)) : 2}px"></i><span>${'LMMJVSD'[i]}</span></button>`).join('')}</div>
-    ${faltan.length ? `<div class="chico" style="margin-top:12px">Te faltó registrar. Toca el día para completarlo:</div><div class="chips">${faltan.map((x) => `<button class="chip" data-verdia="${x.f}">${esc(fechaLarga(x.f))} · ${x.r.marcadas} de 3</button>`).join('')}</div>` : ''}
-    <div class="chico" style="margin-top:10px">Cuenta el promedio de la semana, nunca un solo día. Solo entran los días con sus 3 comidas marcadas.</div>`;
+    ${faltan.length ? `<div class="chico" style="margin-top:12px">Te faltó registrar. Toca el día para completarlo:</div><div class="chips">${faltan.map((x) => `<button class="chip" data-verdia="${x.f}">${esc(fechaLarga(x.f))} · ${x.r.marcadas} de ${comidasPlan().length}</button>`).join('')}</div>` : ''}
+    <div class="chico" style="margin-top:10px">Cuenta el promedio de la semana, nunca un solo día. Solo entran los días con todas tus comidas marcadas.</div>`;
 }
 // Tocar un día (tira de arriba, barras, pendientes) o cambiar de semana, en Mi día y en Nutrición.
 document.getElementById('main').addEventListener('click', (e) => {
@@ -1327,7 +1338,7 @@ function htmlFoto(nombre) {
   return `<div class="resultado on" style="margin-top:10px"><h3>${esc(r.platillo)}</h3>
     <p><b>Cómete:</b> ${esc(r.comete)}</p><p><b>Aprox.:</b> ${esc(r.aprox)}</p><p><b>Tip:</b> ${esc(r.tip)}</p>
     <p class="chico">Lo que se calcula de una foto es aproximado.</p>
-    ${r.ok && !r.agregado ? `<button class="btn lima" data-fotoagregar="${nombre}">Agregar a mi ${nombre.toLowerCase()} · ${r.kcal} kcal · ${r.proteina} g</button>` : r.agregado ? '<p class="ok">Agregado ✓</p>' : ''}${cerrar}</div>`;
+    ${r.ok && !r.agregado ? `<button class="btn lima" data-fotoagregar="${nombre}">Agregar a ${esExtra(nombre) ? 'mi día' : 'mi ' + nombre.toLowerCase()} · ${r.kcal} kcal · ${r.proteina} g</button>` : r.agregado ? '<p class="ok">Agregado ✓</p>' : ''}${cerrar}</div>`;
 }
 
 function achicarFoto(archivo) {
@@ -1354,7 +1365,7 @@ function pedirFoto(nombre) {
     fotoRes[nombre] = { cargando: true }; pintarComidas();
     try {
       const r = resumenDia(dia), c = leerDia(dia).c;
-      const faltan = Math.max(1, PRINCIPALES.filter((x) => !c[x] || !c[x].estado).length);
+      const faltan = Math.max(1, comidasPlan().filter((x) => !c[x] || !c[x].estado).length);
       const contexto = { faltan, meta: r.metaKcal ? `${r.metaKcal} kcal${r.metaProt ? ` y ${r.metaProt} g de proteína` : ''}` : '',
         restaKcal: r.metaKcal ? Math.max(0, r.metaKcal - r.kcal) : '', faltaProt: r.metaProt ? Math.max(0, r.metaProt - r.prot) : '' };
       const res = await nube('app_foto', { imagen: await achicarFoto(archivo), comida: nombre, contexto });
@@ -1483,12 +1494,12 @@ function pintarMenu() {
   }
   const campo = 'width:100%;margin-top:6px;padding:12px;border-radius:12px;border:1px solid var(--linea);background:var(--fondo,#0B0D0A);color:var(--texto);font:500 16px Poppins,sans-serif;box-sizing:border-box';
   if (!NUBE_PREFS || editandoPrefs) {
-    const p = NUBE_PREFS || {}, nCom = Number(p.comidas) || (D.extra.comidas || []).length || 3, coc = String(p.cocina || 'Sartén');
+    const p = NUBE_PREFS || {}, planCom = (D.extra.comidas || []).length, nCom = Number(p.comidas) || (D.extra.comidas || []).length || 3, coc = String(p.cocina || 'Sartén');
     el.innerHTML = `<h2>Tu menú</h2><div class="card mor"><div class="etq mor">Cuéntame qué te gusta</div>
       <div class="sub" style="margin-top:6px">La app arma tu menú con tus números y con esto. Lo puedes cambiar cuando quieras.</div>
       <div class="campo">Qué te gusta comer</div><textarea id="pfGusta" rows="2" style="${campo}" placeholder="Ej. pollo, huevo, arroz, tacos, fruta">${esc(p.gusta || '')}</textarea>
       <div class="campo">Qué no comes o te cae mal (alergias)</div><textarea id="pfNo" rows="2" style="${campo}" placeholder="Ej. no como pescado; intolerante a la lactosa">${esc(p.noCome || '')}</textarea>
-      <div class="campo">Comidas al día</div><div class="chips" id="pfComidas" style="margin-top:6px">${[2, 3, 4, 5].map((n) => `<button class="chip${n === nCom ? ' on' : ''}" data-pfc="${n}">${n}</button>`).join('')}</div>
+      <div class="campo">Comidas al día</div>${planCom ? `<div class="sub" style="margin-top:6px">${planCom}, las de tu plan: ${esc(comidasPlan().join(', '))}. Si quieres otro número, pídeselo a Angel.</div>` : `<div class="chips" id="pfComidas" style="margin-top:6px">${[2, 3, 4, 5].map((n) => `<button class="chip${n === nCom ? ' on' : ''}" data-pfc="${n}">${n}</button>`).join('')}</div>`}
       <div class="campo">Con qué cocinas</div><div class="chips" id="pfCocina" style="margin-top:6px">${COCINA.map((x) => `<button class="chip${coc.includes(x) ? ' on' : ''}" data-pfk="${x}">${x}</button>`).join('')}</div>
       <button class="btn lima" data-pfguardar="armar">Guardar y armar ${NUBE_MENU ? 'otro' : 'mi'} menú</button>
       ${NUBE_PREFS ? '<button class="btn borde" data-pfguardar="solo">Solo guardar mis gustos</button><button class="chip" data-pfcancelar="1" style="margin-top:10px">Cancelar</button>' : ''}</div>`;
@@ -1528,7 +1539,7 @@ async function armarMenu(pedido = '') {
   if (menuEstado === 'armando') return;
   const antes = NUBE_MENUS[0] || null;
   menuEstado = 'armando'; pintarMenu(); verMenu();
-  try { ponerMenuNuevo((await nube('app_menu', { kcal: D.extra.kcal, proteina: D.extra.proteina, pedido })).menu); }
+  try { ponerMenuNuevo((await nube('app_menu', { kcal: D.extra.kcal, proteina: D.extra.proteina, comidas: (D.extra.comidas || []).length || undefined, pedido })).menu); }
   catch (e) {
     // Error que sí contestó la nube (tope del día, sin números...): se muestra. Corte de conexión: se espera.
     const corte = e instanceof TypeError || e instanceof SyntaxError || /abort|network|load failed/i.test(e.message || '');
@@ -1561,7 +1572,7 @@ function conectarMenu() {
       if (menuEstado === 'guardando') return;
       const preferencias = {
         gusta: box.querySelector('#pfGusta').value.trim(), noCome: box.querySelector('#pfNo').value.trim(),
-        comidas: Number((box.querySelector('[data-pfc].on') || {}).dataset?.pfc) || 3,
+        comidas: (D.extra.comidas || []).length || Number((box.querySelector('[data-pfc].on') || {}).dataset?.pfc) || 3,
         cocina: Array.from(box.querySelectorAll('[data-pfk].on')).map((x) => x.dataset.pfk).join(', ') || 'Sartén',
       };
       // Los errores se muestran sin volver a pintar, para no borrar lo que escribió.
