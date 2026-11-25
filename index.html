@@ -236,7 +236,7 @@ function sesionDe(t) {
 
 let D = null;
 let CODIGO = null; // código del link con el que se abrió ESTA pestaña (de él sale su acceso a la nube)
-const VERSION = '5fe3bbee87e4', VERSION_TXT = '24 nov, 10:02'; // los pone publicar-app.js
+const VERSION = 'fb8bb20f77e7', VERSION_TXT = '25 nov, 15:26'; // los pone publicar-app.js
 
 // En la PC de Angel lee la API local. Publicada (GitHub Pages), lee el archivo cifrado del cliente:
 // el link trae un código (#código) y el cliente escribe su clave una vez; sin los dos no se puede leer nada.
@@ -872,7 +872,7 @@ const fDia = () => diaReg || D.hoy;
 const leerDia = (f = fDia()) => { const d = leerJ(claveDia(f), {}); d.c = d.c || {}; return d; };
 function verDia(f) {
   diaReg = !f || f === D.hoy ? null : f;
-  editando = null; Object.keys(fotoRes).forEach((k) => delete fotoRes[k]);
+  editando = null; Object.keys(fotoRes).forEach((k) => delete fotoRes[k]); Object.keys(textos).forEach((k) => delete textos[k]);
   Object.keys(tragos).forEach((k) => delete tragos[k]); Object.assign(tragos, leerJ(claveTragos(fDia()), {}));
   if (!diaReg) semanaOff = 0;
   pintarAlcohol(); pintarComidas(); pintarDia();
@@ -888,7 +888,7 @@ function valorPlan(nombre) {
 }
 function totalComida(c, nombre) {
   if (!c || c.estado === 'no') return { kcal: 0, prot: 0 };
-  if (c.estado === 'plan') return valorPlan(nombre);
+  if (c.estado === 'plan') { const v = valorPlan(nombre); return (c.extras || []).reduce((s, o) => ({ kcal: s.kcal + o.kcal, prot: s.prot + o.prot }), v); }
   let kcal = 0, prot = 0;
   Object.entries(c.items || {}).forEach(([k, q]) => { const a = ALIM[k]; if (a && q) { kcal += a[3] * q; prot += a[4] * q; } });
   (c.otros || []).forEach((o) => { kcal += o.kcal; prot += o.prot; });
@@ -902,7 +902,7 @@ function vistaMiDia() {
       <div id="diaResumen" style="margin-top:12px"></div>
       <div class="resultado on" id="diaConsejo"></div></div>
     <h2 id="diaH2">Tus comidas de hoy</h2>
-    <div class="sub" style="margin:-4px 0 10px">Marca cada comida al terminarla. Si fue fuera del plan, agrega lo que comiste y la app ajusta el resto de tu día.</div>
+    <div class="sub" style="margin:-4px 0 10px">Marca cada comida al terminarla. Si comiste algo de más o fuera del plan, escríbelo y la app calcula sus calorías y proteína.</div>
     <div id="diaComidas"></div>
     <h2 id="diaH2t">Tragos de hoy</h2>
     <div class="card" id="contador"><div class="sub">Lo mejor es no tomar. Si tomas: máximo 2 destilados con agua mineral. Se suman solos a tu día.</div>
@@ -915,6 +915,45 @@ function vistaMiDia() {
   </section>`;
 }
 
+const lineaOtro = (nombre, o, i, dato) => `<li style="align-items:center"><span>${esc(o.n)}<br><span class="chico">${o.kcal} kcal · ${o.prot} g</span></span><button class="chip" data-${dato}="${i}" data-c="${nombre}" style="padding:6px 10px">Quitar</button></li>`;
+
+// ---------- Cuadro de texto (25 nov 2026, pedido de Angel): escribe qué comió de más o fuera del plan y la IA pone calorías y proteína ----------
+// Con "Del plan" se suma a lo del plan (c.extras); si no, queda como fuera del plan (c.otros con t:1). Solo aparece si la puerta ya trae app_texto.
+let TEXTO_OK = false;
+const hayTexto = () => hayNube() && TEXTO_OK;
+const textos = {}; // por comida: { v: lo escrito, cargando, error, ok }
+function cajaTexto(nombre, est) {
+  if (!hayTexto()) return '';
+  const t = textos[nombre] || {};
+  const titulo = est === 'plan' ? 'Comiste algo de más?' : nombre === 'Colación' ? 'Comiste algo entre comidas?' : 'Qué comiste?';
+  return `<div class="campo" style="margin-top:12px">${titulo}</div>
+    <textarea class="buscar" data-texto="${nombre}" rows="2" maxlength="400" placeholder="${est === 'plan' || nombre === 'Colación' ? 'Ej. 15 avellanas y un café con leche' : 'Ej. 3 tacos de pastor y un agua de jamaica'}" style="margin-top:6px;resize:vertical;font-size:16px" ${t.cargando ? 'disabled' : ''}>${esc(t.v || '')}</textarea>
+    ${t.error ? `<div class="avisoerr">${esc(t.error)}</div>` : ''}${t.ok ? `<div class="chico ok" style="margin-top:6px">${esc(t.ok)}</div>` : ''}
+    <button class="btn lima" data-textoenviar="${nombre}" data-c="${nombre}" style="margin-top:8px" ${t.cargando ? 'disabled' : ''}>${t.cargando ? 'Calculando…' : 'Registrar lo que escribí'}</button>`;
+}
+async function enviarTexto(nombre) {
+  const t = textos[nombre] = textos[nombre] || {}, escrito = (t.v || '').trim(), dia = fDia();
+  if (t.cargando) return;
+  if (!escrito) { t.error = 'Escribe qué comiste y cuánto.'; return pintarComidas(); }
+  t.cargando = true; t.error = t.ok = ''; pintarComidas();
+  try {
+    const r = await nube('app_texto', { texto: escrito, comida: nombre });
+    const nuevos = (r.alimentos || []).map((a) => ({ n: a.nombre, kcal: Math.round(a.kcal), prot: Math.round(a.proteina), t: 1 }));
+    if (!nuevos.length) throw new Error('No encontré alimentos. Escribe qué comiste y cuánto.');
+    const d = leerDia(dia), c = d.c[nombre] = d.c[nombre] || {}; // se lee otra vez: pudo cambiar mientras calculaba
+    if (c.estado === 'plan') c.extras = (c.extras || []).concat(nuevos);
+    else { c.estado = 'fuera'; c.otros = (c.otros || []).concat(nuevos); }
+    guardarJ(claveDia(dia), d);
+    if (editando === nombre) editando = null;
+    const k = nuevos.reduce((s, x) => s + x.kcal, 0), p = nuevos.reduce((s, x) => s + x.prot, 0);
+    textos[nombre] = { ok: `Registrado ✓ ≈ ${k} kcal y ${p} g de proteína` };
+  } catch (e) {
+    textos[nombre] = { v: escrito, error: /fetch|network|load failed/i.test(e.message || '') ? 'Sin conexión. Intenta otra vez en un momento.' : e.message };
+  }
+  if (fDia() !== dia) { delete textos[nombre]; pintarSemanaDias(); pintarHistorial(); return; }
+  pintarComidas(); pintarDia();
+}
+
 function htmlComida(nombre, c) {
   const t = totalComida(c, nombre), est = c && c.estado;
   const conMeta = Number(D.extra.kcal) > 0;
@@ -924,12 +963,16 @@ function htmlComida(nombre, c) {
       ${nombre !== 'Colación' ? `<button class="chip${est === 'no' ? ' on' : ''}" data-estado="no" data-c="${nombre}">No la hice</button>` : ''}
       ${hayNube() ? `<button class="chip" data-foto="${nombre}">📷 Foto</button>` : ''}</div>${htmlFoto(nombre)}`;
   let detalle = '';
+  if (est === 'plan' || (nombre === 'Colación' && !est)) {
+    const l = est === 'plan' ? (c.extras || []) : [];
+    detalle = `${l.length ? `<ul class="lista" style="margin-top:8px">${l.map((o, i) => lineaOtro(nombre, o, i, 'quitarx')).join('')}</ul>` : ''}${cajaTexto(nombre, est)}`;
+  }
   if (est === 'fuera') {
     const lineas = [];
     Object.entries(c.items || {}).forEach(([k, q]) => { const a = ALIM[k]; if (a && q) lineas.push(`<li><span>${q} × ${esc(a[1])}</span><span class="chico">${a[3] * q} kcal · ${a[4] * q} g</span></li>`); });
-    (c.otros || []).forEach((o, i) => lineas.push(`<li style="align-items:center"><span>${esc(o.n)}<br><span class="chico">${o.kcal} kcal · ${o.prot} g</span></span><button class="chip" data-quitar="${i}" data-c="${nombre}" style="padding:6px 10px">Quitar</button></li>`));
+    (c.otros || []).forEach((o, i) => lineas.push(lineaOtro(nombre, o, i, 'quitar')));
     detalle = `${lineas.length ? `<ul class="lista" style="margin-top:8px">${lineas.join('')}</ul>` : '<div class="chico" style="margin-top:8px">Aún no agregas nada.</div>'}
-      ${editando === nombre ? selector(nombre, c) : `<button class="btn borde" data-editar="${nombre}" style="margin-top:10px">${lineas.length ? 'Agregar o cambiar' : 'Agregar lo que comí'}</button>`}`;
+      ${cajaTexto(nombre, est)}${editando === nombre ? selector(nombre, c) : `<button class="btn borde" data-editar="${nombre}" style="margin-top:10px">${hayTexto() ? 'Buscar en la lista' : lineas.length ? 'Agregar o cambiar' : 'Agregar lo que comí'}</button>`}`;
   }
   return `<div class="card reg ${est || ''}" data-comida="${nombre}">
     <div class="cab"><span class="icob">${ICO_COMIDA(nombre)}</span><b>${nombre}</b>
@@ -1035,11 +1078,17 @@ function conectarDia() {
     const b = e.target.closest('button'); if (!b) return;
     const n = b.dataset.c || b.dataset.editar || b.dataset.listo || b.dataset.otro || b.dataset.foto || b.dataset.fotoagregar || b.dataset.fotocerrar;
     if (b.dataset.foto) return pedirFoto(n);
+    if (b.dataset.textoenviar) return enviarTexto(b.dataset.textoenviar);
     const d = leerDia(); const c = d.c[n] = d.c[n] || {};
     let todo = true; // volver a pintar las tarjetas
     if (b.dataset.estado) {
+      const antes = c.estado;
       c.estado = c.estado === b.dataset.estado ? undefined : b.dataset.estado;
-      editando = c.estado === 'fuera' && !Object.keys(c.items || {}).length && !(c.otros || []).length ? n : (editando === n ? null : editando);
+      // Lo que escribió no se pierde al cambiar entre "Del plan" y "Fuera del plan".
+      if (c.estado === 'plan' && (c.otros || []).some((o) => o.t)) { c.extras = (c.extras || []).concat(c.otros.filter((o) => o.t)); c.otros = c.otros.filter((o) => !o.t); }
+      if (c.estado === 'fuera' && (c.extras || []).length) { c.otros = (c.otros || []).concat(c.extras); delete c.extras; }
+      if (antes !== c.estado && textos[n]) textos[n] = { v: textos[n].v };
+      editando = !hayTexto() && c.estado === 'fuera' && !Object.keys(c.items || {}).length && !(c.otros || []).length ? n : (editando === n ? null : editando);
     } else if (b.dataset.editar) editando = n;
     else if (b.dataset.listo) editando = null;
     else if (b.dataset.grupo) {
@@ -1052,7 +1101,8 @@ function conectarDia() {
       if (!c.items[k]) delete c.items[k];
       const v = b.parentNode.querySelector('[data-dn]'); if (v) v.textContent = c.items[k] || 0;
       todo = false;
-    } else if (b.dataset.quitar) (c.otros || []).splice(Number(b.dataset.quitar), 1);
+    } else if (b.dataset.quitar) { (c.otros || []).splice(Number(b.dataset.quitar), 1); if (textos[n]) textos[n].ok = ''; }
+    else if (b.dataset.quitarx) { (c.extras || []).splice(Number(b.dataset.quitarx), 1); if (textos[n]) textos[n].ok = ''; }
     else if (b.dataset.otro) {
       const q = (s) => box.querySelector(`[data-otro-${s}="${n}"]`);
       const k = Number(q('k').value), p = Number(q('p').value) || 0;
@@ -1070,7 +1120,7 @@ function conectarDia() {
     else { const t = totalComida(c, n), s = box.querySelector(`[data-comida="${n}"] .der`); if (s) s.innerHTML = `<span class="k">${t.kcal.toLocaleString('es-MX')} kcal</span><span class="p">${t.prot} g prot</span>`; }
     pintarDia();
   });
-  box.addEventListener('input', (e) => { const i = e.target.closest('[data-buscar]'); if (i) filtrar(i.dataset.buscar); });
+  box.addEventListener('input', (e) => { const i = e.target.closest('[data-buscar]'); if (i) filtrar(i.dataset.buscar); const x = e.target.closest('[data-texto]'); if (x) (textos[x.dataset.texto] = textos[x.dataset.texto] || {}).v = x.value; });
   pintarComidas();
   pintarDia();
 }
@@ -1157,7 +1207,7 @@ async function sincronizar() {
   try {
     const pendDias = leerJ(clavePend(), []), pendCorrer = lee(claveCorrer() + '-pend'), tCorrer = leerCorrer().t || 0;
     const r = await nube('app_leer', {});
-    NUBE_OK = true;
+    NUBE_OK = true; TEXTO_OK = !!r.texto;
     const enNube = new Set();
     let cambioHoy = false;
     (r.dias || []).forEach((x) => {
@@ -1201,7 +1251,7 @@ async function revisarVersion() {
     const v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).v;
     if (!v || v === VERSION) return;
     const [ya, cuando] = (sessionStorage.getItem('asf-version') || '').split('|'); if (ya === v && Date.now() - Number(cuando) < 10 * 60e3) return;
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || correrForm || editandoPrefs || menuEstado) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || correrForm || editandoPrefs || menuEstado || Object.values(textos).some((x) => x.v || x.cargando)) return;
     sessionStorage.setItem('asf-version', v + '|' + Date.now());
     await fetch(location.pathname + location.search, { cache: 'reload' });
     location.reload();
